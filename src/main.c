@@ -15,8 +15,7 @@
  *
  * Customize this file for your game:
  *   - Set YOUR_GAME_ENTRY_POINT to the XBE entry point address
- *   - Set YOUR_GAME_XBE_PATH to where the XBE file lives
- *   - Set YOUR_GAME_DIR to the game data directory
+ *   - Set YOUR_GAME_DIR to a developer fallback for game-file discovery
  *   - Add any CRT global pre-initialization your game needs
  *   - Customize the VEH handler for game-specific crash diagnosis
  *
@@ -38,6 +37,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include "game_files.h"
 
 /* xboxrecomp runtime headers */
 #include <xbox/xboxrecomp.h>
@@ -80,13 +80,12 @@ extern ptrdiff_t g_xbox_mem_offset;
 /* ── XBE Constants ─────────────────────────────────────────── */
 
 /*
- * TODO: Set these from your xbe_parser output.
- * Run: py -3 -m tools.xbe_parser game/default.xbe
+ * USA disc entry point and this machine's isolated bring-up data.
+ * Remembered and portable game folders take precedence over this fallback.
  */
 #define YOUR_GAME_ENTRY_POINT   0x0003D755  /* XBE entry point VA */
-#define YOUR_GAME_XBE_PATH      "P:\\Recomp\\SeriousSam\\Serious Sam (USA)\\default.xbe"
-#define YOUR_GAME_DIR            "P:\\Recomp\\SeriousSam\\Serious Sam (USA)"
-#define YOUR_GAME_SAVE_DIR       "P:\\Recomp\\serious_sam\\saves"
+#define YOUR_GAME_DIR            "P:\\Recomp\\serious_sam\\test_game"
+static char s_game_dir[MAX_PATH], s_xbe_path[MAX_PATH], s_save_dir[MAX_PATH];
 
 /* ── Forward declarations ──────────────────────────────────── */
 
@@ -303,6 +302,87 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+/* ── Crash log ─────────────────────────────────────────────────
+ *
+ * Started from Explorer the program has no stderr, and a crash left nothing
+ * to report. Unless stderr is already redirected, it goes to serious_sam_log.txt
+ * beside the program; the run before is kept as serious_sam_log.prev.txt, so
+ * starting again after a crash does not lose it. abort() -- the emulation's
+ * own checks, an uncaught C++ exception, an invalid CRT argument -- was a
+ * silent fail-fast (0xC0000409): it is now logged and the program exits. */
+#include <io.h>
+#include <signal.h>
+
+static int s_file_log;
+
+static void open_log(void)
+{
+    char dir[MAX_PATH], log[MAX_PATH + 32], prev[MAX_PATH + 32];
+    char *slash;
+    int fd = _fileno(stderr);
+
+    if (fd >= 0 && _get_osfhandle(fd) != -1 && _get_osfhandle(fd) != -2)
+        return;
+    if (!GetModuleFileNameA(NULL, dir, sizeof dir)) return;
+    slash = strrchr(dir, '\\');
+    if (!slash) return;
+    *slash = 0;
+    snprintf(log, sizeof log, "%s\\serious_sam_log.txt", dir);
+    snprintf(prev, sizeof prev, "%s\\serious_sam_log.prev.txt", dir);
+    MoveFileExA(log, prev, MOVEFILE_REPLACE_EXISTING);
+    s_file_log = freopen(log, "w", stderr) != NULL;
+}
+
+static void log_fatal(const char *what)
+{
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    fprintf(stderr, "[FATAL] %s at %02u:%02u:%02u -- the lines above say what led to it\n",
+            what, now.wHour, now.wMinute, now.wSecond);
+    fflush(stderr);
+}
+
+static void on_abort(int signal_number)
+{
+    (void)signal_number;
+    log_fatal("abort()");
+    _exit(3);
+}
+
+static void on_invalid_parameter(const wchar_t *expression, const wchar_t *function,
+                                 const wchar_t *file, unsigned line, uintptr_t reserved)
+{
+    (void)expression; (void)function; (void)file; (void)line; (void)reserved;
+    log_fatal("invalid argument to a C runtime function");
+    _exit(3);
+}
+
+static void on_purecall(void)
+{
+    log_fatal("pure virtual call");
+    _exit(3);
+}
+
+static LONG WINAPI on_unhandled(EXCEPTION_POINTERS *ep)
+{
+    char what[96];
+    snprintf(what, sizeof what, "unhandled exception 0x%08lX at RIP=0x%llX",
+             (unsigned long)ep->ExceptionRecord->ExceptionCode,
+             (unsigned long long)ep->ContextRecord->Rip);
+    log_fatal(what);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void install_crash_log(void)
+{
+    open_log();
+    signal(SIGABRT, on_abort);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _set_invalid_parameter_handler(on_invalid_parameter);
+    _set_purecall_handler(on_purecall);
+    SetUnhandledExceptionFilter(on_unhandled);
+}
+
 /* ── WinMain ───────────────────────────────────────────────── */
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
@@ -316,13 +396,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     (void)lpCmdLine;
     (void)nCmdShow;
 
+    install_crash_log();
+
     /* Boot probes must finish without waiting on a Windows crash dialog.
      * The VEH below still records the exception and guest state. */
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 
-    /* Unbuffered output for immediate visibility during debugging */
+    /* Keep redirected probe output immediate; buffer normal disk logs. */
     setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, s_file_log ? _IOFBF : _IONBF, s_file_log ? 65536 : 0);
 
     printf("=== Serious Sam - Static Recompilation ===\n");
     if (!getenv("RECOMP_PB_EXEC"))
@@ -341,6 +423,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* D3D Present waits on the title's vblank event, including the movie worker. */
     if (!getenv("RECOMP_VBLANK"))
         _putenv_s("RECOMP_VBLANK", "1");
+    /* These are required for normal startup too, not just diagnostic probes. */
+    if (!getenv("RECOMP_STREAM_PREFETCH"))
+        _putenv_s("RECOMP_STREAM_PREFETCH", "1");
+    if (!getenv("RECOMP_OPTIONAL_DEFAULTS"))
+        _putenv_s("RECOMP_OPTIONAL_DEFAULTS", "1");
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */
@@ -352,7 +439,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     AddVectoredExceptionHandler(1, veh_handler);
 
     /* Step 1: Load XBE */
-    if (!load_xbe(YOUR_GAME_XBE_PATH, &xbe_data, &xbe_size)) {
+    if (!game_files_locate(YOUR_GAME_DIR, s_game_dir, sizeof s_game_dir)) return 1;
+    _putenv_s("RECOMP_GAME_DIR", s_game_dir);
+    snprintf(s_xbe_path, sizeof s_xbe_path, "%s\\default.xbe", s_game_dir);
+    snprintf(s_save_dir, sizeof s_save_dir, "%s\\saves", s_game_dir);
+    fprintf(stderr, "[BOOT] game files: %s\n", s_game_dir);
+    if (!load_xbe(s_xbe_path, &xbe_data, &xbe_size)) {
         MessageBoxA(NULL, "Failed to load default.xbe.\n"
                     "Place the game files in the 'game' subdirectory.",
                     "Recomp", MB_ICONERROR);
@@ -396,8 +488,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         extern void xbox_path_init(const char *game_dir, const char *save_dir);
         const char *game_dir = getenv("RECOMP_GAME_DIR");
         const char *save_dir = getenv("RECOMP_SAVE_DIR");
-        xbox_path_init(game_dir && *game_dir ? game_dir : YOUR_GAME_DIR,
-                       save_dir && *save_dir ? save_dir : YOUR_GAME_SAVE_DIR);
+        xbox_path_init(game_dir && *game_dir ? game_dir : s_game_dir,
+                       save_dir && *save_dir ? save_dir : s_save_dir);
     }
 
     /* Step 5: Initialize kernel bridge (thunk table in Xbox memory) */

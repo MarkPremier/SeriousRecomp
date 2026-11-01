@@ -49,6 +49,8 @@ stdout.txt
 analysis/
 test_game/
 saves/
+serious_sam_settings.ini
+serious_sam_log.prev.txt
 
 # IDE
 .vscode/

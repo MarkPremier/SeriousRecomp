@@ -317,3 +317,72 @@ watchdog/crash investigations. Decoded frame captures and the temporary trace
 wrapper are ignored local artifacts under `analysis/movie_raw` and
 `analysis/movie_trace_wrapper.c`. No game data is tracked and no GitHub pushes
 or releases were made.
+
+## Normal launcher and Turok workflow (2026-11-02)
+
+The user asked to follow the completed Turok project's approach. Reviewed its
+README, launcher, file locator and current runtime history read-only. The intended
+milestones are an ordinary executable launch with working defaults and useful
+logs, then correct menus and gameplay at native GPU performance. The RGB565 CPU
+fallback remains an intermediate correctness measure.
+
+Adapted Turok's game-file locator to Serious Sam's USA XBE SHA-1
+`5463f81814860649ce6fae754e34d84b02ed93cb`, `Main.gro` and the movie archives.
+Normal startup now selects and remembers the data folder, loads its XBE, and
+publishes the same folder to the stream/settings wrappers. It defaults stream
+prefetch and optional settings alongside the existing hardware defaults. The local
+build uses prepared `test_game` as its developer fallback, with its own saves.
+Portable discovery, image extraction and a picker are available, but the complete
+fresh-disc installation path has not been verified: the successful local folder
+contains the earlier loose assets, fonts and first-run files described above.
+The extractor uses a unique temporary directory and never recursively deletes a
+pre-existing game directory.
+
+Explorer launches also create and rotate `serious_sam_log.txt` and
+`serious_sam_log.prev.txt` beside the executable. Normal disk output is buffered;
+fatal/exception reports flush explicitly. Existing redirected stderr is retained
+for probes. Log buffering alone did not resolve the startup stall.
+
+### Pending GPU fence
+
+Plain launches exposed a timing-dependent stall during texture loading. Native
+watchdog samples identify `sub_003098A0` (XDK BlockOnTime). A read-only process
+memory capture gave these concrete values:
+
+- Device `0x003143E0`, flags `2`, next CPU fence `0x1D3`, completed fence
+  `[0x80007000] = 0x1CF`.
+- Actual submitted/consumed DMA PUT/GET both `0xFC84`.
+- The command buffer already contains semaphore release `0x1D1` at `0x8000FD10`,
+  beyond PUT. The wait asks for this issued, unsubmitted work.
+
+The manual `sub_003098A0` wrapper submits pending commands using the translated
+`sub_00309700` KickOff before the original wait. It only does so for an outstanding
+already-issued fence with unsubmitted data, outside pushbuffer recording mode.
+Already completed/submitted fences and the next-fence case retain the original
+path. Guest registers and the stack are restored before entering the original
+wait. The wrapper never writes the completion value: the executor must process
+the real semaphore command. The deeper scheduling cause between the movie and
+asset-loader threads is not yet proven; this is a targeted bring-up workaround.
+
+### Verification
+
+- Release build succeeds. A normal launch with no probe environment visibly
+  played Croteam's animation and naturally reached the partially rendered menu
+  (frame 966). Its log/map are saved as `analysis/launcher_fence_fixed_first.*`.
+- The final build narrows submission to outstanding fences. Launched this build
+  by double-clicking the executable in the user's Release Explorer window;
+  Croteam frames visibly advance, without a watchdog or probe settings. It
+  naturally reaches the partial menu at frame 965 and stalls there. Its log and
+  matching map are saved as `analysis/launcher_final_explorer.*`.
+- `tests/fence_submit_test.c` exercises the captured pending-fence condition,
+  verifies the guest ABI survives submission, verifies completion is not forged,
+  and checks completed, submitted, recording and next-fence cases. Passes 1/1:
+
+```powershell
+& $cmake -S tests -B build/manual_tests
+& $cmake --build build/manual_tests --config Release --parallel 6
+ctest --test-dir build/manual_tests -C Release --output-on-failure
+```
+
+Menu layout/clipping and a subsequent stall remain unresolved. Gameplay and audio
+quality remain unverified. No changes were made to Turok or its runtime worktree.

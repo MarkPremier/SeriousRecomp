@@ -14,23 +14,27 @@ project is the reference for how the pipeline works and for the kinds of bugs to
 It is in active use by another agent, so **read it, but never modify it** (see
 "Do not touch").
 
-## Current state (2026-11-01)
+## Current state (2026-11-02)
 
 - Repo: `P:\Recomp\serious_sam`, branch `main`, remote
   `https://github.com/MarkPremier/SeriousRecomp` (private). It contains the
   xboxrecomp `templates/new-game` scaffold, renamed for this game.
 - Disc extracted to `P:\Recomp\SeriousSam\Serious Sam (USA)\`: `default.xbe`,
   `Main.gro`, `Movies0.gro`-`Movies5.gro`. The ISO is next to it.
-- `src/main.c`: `YOUR_GAME_ENTRY_POINT` = `0x0003D755`, XBE and game paths point at
-  the folder above.
+- `src/main.c`: entry point `0x0003D755`. Turok-style game-file discovery checks
+  environment, remembered/portable files, image and developer fallback. The local
+  fallback is the isolated, prepared `serious_sam/test_game` folder. Normal launches
+  enable the required stream prefetch and first-run defaults and keep a crash log.
 - Update: first native x64 D3D11 Release executable built successfully on
   2026-11-01 using isolated worktree `P:\Recomp\xboxrecomp_ss` at `1d9e929`.
-  Full disassembly found 34,814 entries; all translated with zero failures.
-  Initial headless boot stalls in startup/cleanup and is ended by the watchdog.
-  No rendering or gameplay verified. Read `docs/bringup.md` for the evidence and
-  next steps. `tools/generate.ps1` is the reproducible pipeline; it includes
-  97 observed candidates in `seeds/runtime_feedback.json` on its next run.
-  The existing executable predates these seeds. User chose to focus on D3D11.
+  Current generation contains 35,103 functions, zero failures and 10 unresolved
+  direct-call stubs. The boot movie visibly plays using native DSP and an RGB565
+  CPU colour fallback; a pending-command submission wrapper addresses a separate
+  GPU fence stall seen on normal launches. Menu clipping/stalls and gameplay remain
+  unresolved. Read `docs/bringup.md` for evidence and exact limitations. Fresh
+  archive-only installation is unverified; do not equate the prepared data test
+  with a portable release. `tools/generate.ps1` is the reproducible pipeline.
+  User chose D3D11; native RGB565 colour acceleration remains a target.
 
 ## XBE facts
 

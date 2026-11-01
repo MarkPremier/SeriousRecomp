@@ -26,6 +26,9 @@ your own disc image, and the C code is generated from it on your machine.
 - Boot movie now visibly plays and finishes at the main menu without input.
   RGB565 colour draws use the CPU rasterizer because the D3D11 backend's
   16-bit path only writes depth. Movie probes report roughly 15–28 fps.
+- The launcher follows Turok's file discovery and crash-log workflow. Required
+  stream/settings defaults also apply to normal launches. A pending-command
+  submission fix addresses the GPU fence stall exposed by Explorer launching.
 - Menu rendering still has layout/clipping issues and a subsequent stall;
   gameplay and audio quality are unverified. See
   [bring-up notes](docs/bringup.md) for evidence and the next investigation.
@@ -69,6 +72,24 @@ C are ignored by Git. The Turok runtime is never used as a shared output directo
 
 ## Running and diagnostics
 
+For this development checkout, double-click
+`build/Release/serious_sam_recomp.exe`. The local build falls back to the prepared
+`test_game/` data used for bring-up. No probe script or environment setup is
+required for movie playback.
+
+The launcher checks an explicit `RECOMP_GAME_DIR`, a remembered folder in
+`serious_sam_settings.ini`, `game/` beside the executable, an adjacent ISO/XISO,
+then the developer fallback. Otherwise it offers a file picker. It verifies the
+USA `default.xbe` SHA-1 before loading. Discovery and disc extraction were adapted
+from Turok; a fresh install using only the disc archives has not yet been
+validated. Current verification uses prepared loose assets and first-run files
+in `test_game/` (see [bring-up notes](docs/bringup.md)).
+
+Explorer launches write `serious_sam_log.txt` beside the executable and retain
+the preceding run as `serious_sam_log.prev.txt`. Redirected stderr remains usable
+for diagnostic probes. Saves default to `saves/` within the selected game folder;
+`RECOMP_SAVE_DIR` overrides this. Use a separate game/saves copy for testing.
+
 Copy the extracted game folder to `test_game/` before boot testing. Keep the copy
 and saves local; do not commit either. Then run:
 
@@ -81,8 +102,8 @@ $env:RECOMP_WATCHDOG_SECS = '20'
 
 The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY`, `RECOMP_FB_WINDOW`,
 `RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`, and
-`RECOMP_VBLANK` to `1` if unset. Use the isolated bring-up probe to enable the
-current stream/settings workarounds and capture bounded logs:
+`RECOMP_VBLANK`, `RECOMP_STREAM_PREFETCH`, and `RECOMP_OPTIONAL_DEFAULTS` to `1`
+if unset. Use the isolated bring-up probe to capture bounded logs:
 
 ```powershell
 pwsh -File tools/boot-test.ps1 -Seconds 30 -Label native -Visible
@@ -92,10 +113,8 @@ pwsh -File tools/boot-test.ps1 -Seconds 30 -Label native -Visible
 acknowledges a fixed observed mailbox. It is no longer required to pass audio
 initialization and does not verify working sound.
 
-`RECOMP_GAME_DIR` and `RECOMP_SAVE_DIR` override runtime file
-and save roots. Saves default to this project's `saves/` directory, separate from
-the runtime's shared default save location. The original XBE is loaded from the extracted disc path in
-`src/main.c`. Use `RECOMP_FPS_LOG=5` for periodic performance logging.
+The original XBE is loaded from the selected game folder. Use
+`RECOMP_FPS_LOG=5` for periodic performance logging.
 Release builds emit a linker map with a fixed image base for crash symbolization:
 
 ```powershell
