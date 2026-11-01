@@ -22,12 +22,13 @@
  *
  * XBE Details (fill in from xbe_parser output):
  *   Title:       Serious Sam
- *   Title ID:    0x00000000
+ *   Title ID:    0x54540004 (USA, built 2002-10-02, XDK 4928)
  *   Base addr:   0x00010000
- *   Entry point: 0x00000000
- *   Code size:   ~??? KB (.text)
- *   Sections:    ?? (list them)
- *   Kernel imports: ??
+ *   Entry point: 0x0003D755
+ *   Code size:   ~3019 KB (.text)
+ *   Sections:    14 (.text D3D XMV D3DX XGRPH DSOUND WMADEC XNET XPP
+ *                    .rdata .data DOLBY $$XTIMAGE $$XSIMAGE)
+ *   Kernel imports: 124
  */
 
 #include <windows.h>
@@ -82,7 +83,7 @@ extern ptrdiff_t g_xbox_mem_offset;
  * TODO: Set these from your xbe_parser output.
  * Run: py -3 -m tools.xbe_parser game/default.xbe
  */
-#define YOUR_GAME_ENTRY_POINT   0x00000000  /* XBE entry point VA */
+#define YOUR_GAME_ENTRY_POINT   0x0003D755  /* XBE entry point VA */
 #define YOUR_GAME_XBE_PATH      "P:\\Recomp\\SeriousSam\\Serious Sam (USA)\\default.xbe"
 #define YOUR_GAME_DIR            "P:\\Recomp\\SeriousSam\\Serious Sam (USA)"
 
