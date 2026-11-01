@@ -231,3 +231,89 @@ fatal, C++ exception or unresolved indirect call. Its movie stream advances to
 `0x00403000` bytes (44 read requests), compared with only two requests in the
 earlier passthrough snapshot. The movie is progressing internally, although its
 visual output is still black.
+
+## Boot movie visible — 2026-11-02
+
+This supersedes the black-screen status above. The boot movie now renders in
+the actual game window and finishes naturally at a visible main menu, with no
+keyboard/controller input sent during the playback probe.
+
+### Cause and fix
+
+Temporary tracing around XMV GetNextFrame (`0x003176C0`) returned successful
+frames. The destination argument is a D3D surface object, not a pixel pointer:
+its Data field named contiguous allocations `0x00569000` / `0x005FF000`, with
+640x480 packed YUY2 format `0x24`. Dumping through the runtime DMA resolver and
+converting a captured frame showed a valid animated intro logo. Decoding was
+working. PVIDEO overlay registers were inactive because this title draws the
+movie as a textured quad.
+
+The D3D11 pushbuffer path deliberately treated all 16-bit render targets as
+depth-only shadow passes. Serious Sam's display target is RGB565, so movie
+draws were counted as successful hardware batches without writing any colour.
+GPU reports showed zero colour surfaces and zero texture uploads despite
+hundreds of movie draws.
+
+`nv2a_pb_exec.c` now sends RGB565 draws with colour writes enabled through its
+existing CPU rasterizer on Windows. It synchronizes pending native writes
+before reading/updating guest memory. Depth-only passes and other formats keep
+their previous native path. This also compiles the relevant CPU primitive path
+on Windows; merely rejecting the native batch was insufficient, since Windows
+previously skipped unsupported batches instead of falling back.
+
+The temporary XMV trace/dump wrapper was removed from both manual and generated
+code after diagnosis. The final executable uses the original translated movie
+decoder; no replacement movie playback or game-data patch is involved.
+
+### Verification
+
+- `boot_movie_cpu_visible`: visibly rendered the Croteam animation in the game
+  window. Reported presentation rates were about 23–28 fps while initialization
+  ran; this is no longer a count of black frames.
+- `boot_movie_natural75`: later decoded frames continued advancing, the movie
+  worker exited successfully, and the main menu became visible without input.
+  Subsequent CPU colour rendering measured roughly 14–19 fps. The visible menu
+  has clipping/layout problems and then stops advancing; gameplay remains
+  unverified. Sound quality has not been listened to or validated.
+- Final Release build passes. `boot_movie_final` tests the final executable
+  after removing the diagnostic movie wrapper, with native DSP and no mailbox
+  bypass. It also records successful natural movie-worker termination, then
+  ends at the configured 75-second watchdog (exit 3), without a logged crash or
+  game fatal. Its matching linker map is saved in the probe directory.
+- Focused `nv2a_shader_smoke` regression passes with
+  `NV2A_GPU_RGB565_ONLY=1`. It exercises the real Windows pushbuffer renderer,
+  checks an RGB565 colour pixel and following-memory guard, and checks a packed
+  YUY2 movie texture produces the expected red RGB565 pixel. It also checks the
+  preceding 32-bit draw after explicitly synchronizing native publication.
+- Kernel bridge regression suite passes (1/1).
+
+The broader legacy shader smoke run did not pass during exploration (including
+pushbuffer packet checks); it is not claimed as passing. The focused RGB565
+mode isolates this change from those unrelated checks.
+
+```powershell
+$env:NV2A_GPU_RGB565_ONLY = '1'
+& .\build\xboxrecomp\src\d3d\d3d8_smoke\Release\nv2a_shader_smoke.exe
+```
+
+CPU colour rendering is a correctness fallback, not native RGB565 acceleration.
+Native colour support for 16-bit targets is a future performance improvement.
+The separate post-movie menu stall and clipping also remain to be investigated.
+Runtime commits are `870420d` (RGB565 colour rendering and regression) and
+`5f8ea14` (optional native watchdog sampling), both local on `serious-sam`.
+
+### Diagnostic checkpoint
+
+An optional Windows x64 `RECOMP_WATCH_NATIVE=1` watchdog sample now captures the
+guest main thread's actual native RIP/RSP and candidate return addresses. It
+resumes the thread before logging, so a held CRT output lock cannot deadlock
+the sampler. `boot_movie_natural75` captured RIP `0x145A78CEF` after menu startup;
+that address belongs to its instrumented build, whose map was subsequently
+replaced. Do not symbolize it against a newer map.
+
+`boot-test.ps1` now saves the matching linker map as `executable.map` inside each
+probe directory before launching, so later rebuilds will not invalidate future
+watchdog/crash investigations. Decoded frame captures and the temporary trace
+wrapper are ignored local artifacts under `analysis/movie_raw` and
+`analysis/movie_trace_wrapper.c`. No game data is tracked and no GitHub pushes
+or releases were made.

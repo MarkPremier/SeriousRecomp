@@ -23,10 +23,12 @@ your own disc image, and the C code is generated from it on your machine.
 - Vertical blank interrupts release D3D presentation waits. The APU uses the
   runtime's physical-memory mapper, allowing startup with the DSP interpreter
   enabled and without the diagnostic mailbox bypass.
-- Visible output remains black. A Start/Enter probe exits the boot-movie worker
-  and reaches texture setup, then stalls. No menu or gameplay is verified;
-  frame counters are not evidence of correct rendering or performance. See
-  [bring-up notes](docs/bringup.md) for logs and the next investigation.
+- Boot movie now visibly plays and finishes at the main menu without input.
+  RGB565 colour draws use the CPU rasterizer because the D3D11 backend's
+  16-bit path only writes depth. Movie probes report roughly 15–28 fps.
+- Menu rendering still has layout/clipping issues and a subsequent stall;
+  gameplay and audio quality are unverified. See
+  [bring-up notes](docs/bringup.md) for evidence and the next investigation.
 
 ## What you need
 

@@ -13,6 +13,10 @@ if (-not (Test-Path (Join-Path $gameDir 'Main.gro'))) {
 }
 $logDir = Join-Path $projectDir "analysis\boot_$Label"
 New-Item -ItemType Directory -Force $logDir | Out-Null
+$mapPath = Join-Path $projectDir 'build\Release\serious_sam_recomp.map'
+if (Test-Path -LiteralPath $mapPath) {
+    Copy-Item -LiteralPath $mapPath -Destination (Join-Path $logDir 'executable.map') -Force
+}
 $settings = @{
     RECOMP_GAME_DIR = $gameDir
     RECOMP_SAVE_DIR = (Join-Path $gameDir 'saves')
