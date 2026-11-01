@@ -532,6 +532,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         fprintf(stderr, "[BOOT] flat dispatch unavailable; "
                         "indirect calls will use the binary search\n");
 
+    /* XDK 4928's NO_OPERATION software methods signal D3D's fence event
+     * (context + 0x1A4 == device + 0x2564), and perform pushbuffer fixups.
+     * The ISR calls this same routine with ECX=context and one stack argument. */
+    {
+        if (xbox_Nv2aSoftwareMethodHandler(0x0030B9C0u, 0x003167A0u) < 0)
+            fprintf(stderr, "[BOOT] D3D software-method handler not registered\n");
+    }
+
     /* Arm the hang watchdog. Does nothing unless RECOMP_WATCHDOG_SECS is set,
      * and must be called from this thread -- the guest registers it samples are
      * thread-local, so it has to be handed the copies belonging to the thread

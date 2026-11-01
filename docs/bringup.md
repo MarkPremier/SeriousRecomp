@@ -386,3 +386,76 @@ ctest --test-dir build/manual_tests -C Release --output-on-failure
 
 Menu layout/clipping and a subsequent stall remain unresolved. Gameplay and audio
 quality remain unverified. No changes were made to Turok or its runtime worktree.
+
+## Complete menus and native RGB565 performance (2026-11-02)
+
+The previously incomplete menu was a frame stopped during visibility-query
+retrieval, rather than a reason to alter menu positions. A read-only native thread
+sample found repeated `sub_00304180` (GetVisibilityTestResult) calls from
+`sub_001D8720`, waiting for report byte +12 to stop being `0xFFFFFFFF`.
+
+Two runtime bugs prevented completion:
+
+- GET_REPORT masks bits 24–31 for its type, but compared the still-shifted result
+  with the unshifted ZPASS enum `1`. No valid ZPASS command could match.
+- The report context was treated as a direct RAMIN offset when numerically small.
+  Serious Sam uses handle `12`: actual RAMHT lookup resolves it to instance
+  `0x11A0`, descriptor `0002B03D 10000000 00000003`. Reading RAMIN +12 instead
+  produced an invalid descriptor. Report contexts now always resolve through RAMHT.
+
+After these fixes, the full background, text and Sam animation render. The user
+confirmed that Sam rising from below the screen is the original entrance
+animation. No position/transform changes were made for it.
+
+A later infinite wait at `0x00316944` revealed the missing D3D software-method
+callback. The title's ISR invokes `sub_0030B9C0` with ECX `0x003167A0` and one stack
+argument. Its type-5 case calls KeSetEvent at context +`0x1A4` (device +`0x2564`).
+The launcher now registers this routine after dispatch initialization, following
+Turok's integration pattern with Serious Sam's own addresses. This also restores
+the driver's deferred pushbuffer fixups. A 100-second probe sustains menu animation
+instead of sleeping forever in the completion event.
+
+### Performance
+
+RGB565 colour targets now use the native D3D11 renderer. Internally their colour
+textures are BGRA8; uploads expand RGB565, and required guest-memory publications
+pack it back while preserving guest pitch, row padding and written regions.
+Snapshots and cache identity include the guest byte width. GPU rendering and
+direct presentation avoid the old CPU per-pixel rasterizer. Native 16-bit passes
+without colour writes retain the depth-only path. The CPU fallback remains
+available with `RECOMP_CPU_RGB565=1` for comparison.
+
+Measured with `RECOMP_FPS_LOG=5`, native DSP, the same prepared game data and no
+per-frame trace:
+
+| Probe | Sustained menu samples |
+|---|---|
+| `boot_menu_software_methods` — CPU RGB565 | approximately 10.7–12.1 fps |
+| `boot_menu_native_rgb565` — native, automatic 3× scale | approximately 43.3–48.2 fps |
+| `boot_menu_native_1x` — native, original resolution | approximately 43.7–48.8 fps |
+
+The early movie samples in those logs are separate from menu performance. Lowering
+render scale gives little menu benefit here, so automatic scaling remains the
+default. More performance work should profile guest/DSP execution and synchronization
+before sacrificing image resolution. These are menu measurements, not gameplay.
+
+### Verification and remaining work
+
+- Final x64 Release build succeeds. The normal executable, without probe settings,
+  visibly reaches the complete animated menu and later enters its idle attract
+  movie. The captured normal-run log/map are `analysis/menu_native_final_normal.*`.
+- Focused `NV2A_GPU_REPORT_ONLY=1` shader test passes, including unsupported report
+  type, the real small-handle lookup, ready/result fields and an adjacent guard.
+- Focused `NV2A_GPU_RGB565_ONLY=1` passes on native rendering and with the CPU
+  fallback enabled. It checks exact colour and YUY2 conversion, padded rows,
+  trailing guards, clear/background preservation and a guest CPU edit between
+  partial draws. A direct `nv2a_gpu_draw` assertion ensures native acceptance;
+  silently falling back cannot satisfy that check.
+- The normal-run startup log still contains occasional recoverable pushbuffer
+  desync reports. They did not prevent this run reaching the complete menu, but
+  stability across level loads remains unverified.
+- Menu input and actual gameplay are not yet verified. Keyboard input attempts
+  did not establish menu navigation; no claim of playable controls is made.
+  The later action-looking screen was the recorded attract movie, not gameplay.
+- Runtime commits: `2dd4d90` (query completion) and `f8f9936` (native RGB565).
+  Turok and its runtime worktree remain unchanged. No pushes or releases were made.

@@ -23,14 +23,17 @@ your own disc image, and the C code is generated from it on your machine.
 - Vertical blank interrupts release D3D presentation waits. The APU uses the
   runtime's physical-memory mapper, allowing startup with the DSP interpreter
   enabled and without the diagnostic mailbox bypass.
-- Boot movie now visibly plays and finishes at the main menu without input.
-  RGB565 colour draws use the CPU rasterizer because the D3D11 backend's
-  16-bit path only writes depth. Movie probes report roughly 15–28 fps.
+- Boot movie visibly plays and reaches an animated, fully drawn main menu.
+  RGB565 colour targets now render on D3D11 and present directly from GPU
+  surfaces. Menu measurements improved from roughly 11 fps to 43–49 fps,
+  including automatic 3× rendering on this monitor.
 - The launcher follows Turok's file discovery and crash-log workflow. Required
   stream/settings defaults also apply to normal launches. A pending-command
   submission fix addresses the GPU fence stall exposed by Explorer launching.
-- Menu rendering still has layout/clipping issues and a subsequent stall;
-  gameplay and audio quality are unverified. See
+- Fixed occlusion-query completion and registered the title's D3D software-method
+  handler, which signals completion events and performs pushbuffer fixups.
+  Sustained menu animation is verified; gameplay and audio quality remain
+  unverified. Sam rising into view is his original entrance animation. See
   [bring-up notes](docs/bringup.md) for evidence and the next investigation.
 
 ## What you need
@@ -103,7 +106,9 @@ $env:RECOMP_WATCHDOG_SECS = '20'
 The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY`, `RECOMP_FB_WINDOW`,
 `RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`, and
 `RECOMP_VBLANK`, `RECOMP_STREAM_PREFETCH`, and `RECOMP_OPTIONAL_DEFAULTS` to `1`
-if unset. Use the isolated bring-up probe to capture bounded logs:
+if unset. Menu input and gameplay still need separate validation.
+
+Use the isolated bring-up probe to capture bounded logs:
 
 ```powershell
 pwsh -File tools/boot-test.ps1 -Seconds 30 -Label native -Visible
@@ -115,6 +120,9 @@ initialization and does not verify working sound.
 
 The original XBE is loaded from the selected game folder. Use
 `RECOMP_FPS_LOG=5` for periodic performance logging.
+`RECOMP_CPU_RGB565=1` restores the slower CPU colour fallback for diagnosis.
+`RECOMP_RENDER_SCALE=1` selects original resolution; the runtime otherwise uses
+automatic scaling. Lowering it gave little menu-speed improvement in this test.
 Release builds emit a linker map with a fixed image base for crash symbolization:
 
 ```powershell

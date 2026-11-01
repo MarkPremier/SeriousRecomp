@@ -28,13 +28,15 @@ It is in active use by another agent, so **read it, but never modify it** (see
 - Update: first native x64 D3D11 Release executable built successfully on
   2026-11-01 using isolated worktree `P:\Recomp\xboxrecomp_ss` at `1d9e929`.
   Current generation contains 35,103 functions, zero failures and 10 unresolved
-  direct-call stubs. The boot movie visibly plays using native DSP and an RGB565
-  CPU colour fallback; a pending-command submission wrapper addresses a separate
-  GPU fence stall seen on normal launches. Menu clipping/stalls and gameplay remain
-  unresolved. Read `docs/bringup.md` for evidence and exact limitations. Fresh
+  direct-call stubs. The boot movie visibly plays using native DSP. RGB565 colour
+  now renders on D3D11, with a CPU fallback available for diagnosis. ZPASS report
+  decoding/RAMHT lookup and the title's D3D software-method callback are fixed;
+  full animated menus run about 43–49 fps, versus about 11 fps on the CPU path.
+  Sam's rising entrance animation is correct (confirmed by the user). Menu input
+  and gameplay remain unverified. Read `docs/bringup.md` for evidence. Fresh
   archive-only installation is unverified; do not equate the prepared data test
   with a portable release. `tools/generate.ps1` is the reproducible pipeline.
-  User chose D3D11; native RGB565 colour acceleration remains a target.
+  User chose D3D11 and explicitly requested performance work.
 
 ## XBE facts
 
@@ -162,6 +164,8 @@ Apply these from the start.
 9. **Some visual oddities are in the original game.** The user has xemu and a real Xbox.
    When you are unsure whether behaviour is a bug, ask the user for a reference
    screenshot rather than chasing it.
+   The user confirmed Sam's head rising into the menu is his normal entrance
+   animation; no position/transform fix is needed for that sequence.
 
 ## Do not touch
 

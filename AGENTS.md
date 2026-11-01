@@ -11,3 +11,7 @@ usable standalone launches, automatic/remembered game-file discovery, useful log
 and progress verified in the actual game window through movies, menus and gameplay.
 GPU rendering and playable performance are the target; CPU bring-up fallbacks are
 temporary. Verify the normal executable launch separately from diagnostic probes.
+
+The user confirmed Sam rising from below the menu is the original entrance
+animation (2026-11-02). Do not "correct" his position based on an early frame.
+The user also explicitly requested performance work alongside menu correctness.
