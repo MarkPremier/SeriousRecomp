@@ -13,10 +13,40 @@ extern void sub_0019F1E0_gen(void);
 extern void sub_0019D980(void);
 extern void sub_00047B70_gen(void);
 extern void sub_001A0420_gen(void);
+extern void sub_003098A0_gen(void);
+extern void sub_00309700(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 
 #define GUEST32(va) (*(uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+
+/* XDK 4928 BlockOnTime can wait for an already-issued fence still in the
+ * CPU's pending pushbuffer while the movie worker and asset loader run on
+ * separate host cores. Submit that pending work through the title's own
+ * KickOff before blocking. Completion still comes from the executor's real
+ * semaphore release; never advance the fence value here. */
+void sub_003098A0(void)
+{
+    uint32_t device = GUEST32(0x00313C48);
+    uint32_t requested = GUEST32(g_esp + 4);
+    if (device >= 0x10000 && device + 0x23C4 < 0x08000000 &&
+        !(GUEST32(device + 8) & 4) &&
+        requested != GUEST32(device + 0x30) &&
+        (GUEST32(device + 0x30) - requested) <
+            (GUEST32(device + 0x30) - GUEST32(GUEST32(device + 0x34))) &&
+        GUEST32(device) != GUEST32(device + 0x2C)) {
+        uint32_t saved[] = {g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi,
+                            g_esp, g_ebp, g_seh_ebp};
+        g_ecx = device;
+        g_esp -= 4;
+        GUEST32(g_esp) = 0;
+        sub_00309700();
+        g_eax = saved[0]; g_ecx = saved[1]; g_edx = saved[2];
+        g_ebx = saved[3]; g_esi = saved[4]; g_edi = saved[5];
+        g_esp = saved[6]; g_ebp = saved[7]; g_seh_ebp = saved[8];
+    }
+    sub_003098A0_gen();
+}
 
 /* FileExists uses an Open_t try/catch in the XBE. Preserve its false result
  * for an absent first-run GameSettings.gms without entering the throw path. */
