@@ -219,7 +219,9 @@ static void print_guest_context(void *rip)
  * Declared rather than included so this does not depend on src/apu being on
  * the include path. */
 typedef struct MCPXAPUState MCPXAPUState;
-extern MCPXAPUState *mcpx_apu_init_standalone(uint8_t *ram_ptr);
+extern MCPXAPUState *mcpx_apu_init_standalone_mapped(uint8_t *ram_ptr,
+    uint8_t *(*mapper)(uint64_t physical, uint32_t bytes));
+extern uint8_t *xbox_ApuPhysicalPointer(uint64_t physical, uint32_t bytes);
 extern MCPXAPUState *g_apu_state;
 extern bool apu_hook_handle_mmio(PCONTEXT ctx, uintptr_t fault_addr,
                                  uint32_t fault_xbox_va, int is_write);
@@ -228,19 +230,20 @@ extern int xbox_OhciHandleMmio(void *ctx, uint32_t xbox_va);
 
 static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
 {
+    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_INT_DIVIDE_BY_ZERO ||
+        ep->ExceptionRecord->ExceptionCode == EXCEPTION_INT_OVERFLOW ||
+        ep->ExceptionRecord->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION) {
+        fprintf(stderr, "[CRASH] Exception 0x%08lX at RIP=0x%llX\n",
+            (unsigned long)ep->ExceptionRecord->ExceptionCode,
+            (unsigned long long)ep->ContextRecord->Rip);
+        fprintf(stderr, "  Xbox regs: eax=%08X ecx=%08X edx=%08X esp=%08X "
+                        "ebx=%08X esi=%08X edi=%08X\n",
+            g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi);
+        print_guest_context((void *)ep->ContextRecord->Rip);
+        fflush(stderr);
+    }
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
         uintptr_t fault_addr = ep->ExceptionRecord->ExceptionInformation[1];
-
-        /*
-         * GPU register probe at 0xFD000000 range.
-         * Some games probe NV2A registers directly. On real hardware this
-         * returns GPU state; here we just skip the instruction.
-         * TODO: Implement mini x86-64 decoder for instruction skipping,
-         * or connect to the xbox_nv2a library for proper handling.
-         */
-        if (fault_addr >= 0xFD000000 && fault_addr < 0xFE000000) {
-            return EXCEPTION_CONTINUE_SEARCH;
-        }
 
         /* Trapped hardware registers (APU, USB OHCI) -> their models.
          *
@@ -313,6 +316,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     (void)lpCmdLine;
     (void)nCmdShow;
 
+    /* Boot probes must finish without waiting on a Windows crash dialog.
+     * The VEH below still records the exception and guest state. */
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+
     /* Unbuffered output for immediate visibility during debugging */
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -324,6 +331,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         _putenv_s("RECOMP_AC97_READY", "1");
     if (!getenv("RECOMP_FB_WINDOW"))
         _putenv_s("RECOMP_FB_WINDOW", "1");
+    /* XDK's multimedia timer worker builds KEVENT headers directly. */
+    if (!getenv("RECOMP_TITLE_KEVENTS"))
+        _putenv_s("RECOMP_TITLE_KEVENTS", "1");
+    if (!getenv("RECOMP_HEAP_RECLAIM"))
+        _putenv_s("RECOMP_HEAP_RECLAIM", "1");
+    if (!getenv("RECOMP_NV2A_NATIVE_FENCES"))
+        _putenv_s("RECOMP_NV2A_NATIVE_FENCES", "1");
+    /* D3D Present waits on the title's vblank event, including the movie worker. */
+    if (!getenv("RECOMP_VBLANK"))
+        _putenv_s("RECOMP_VBLANK", "1");
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */
@@ -361,10 +378,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
      * Gated on the same variable that unmaps its registers, because the two
      * halves are useless apart: a trap with no model declines every access,
      * and a model nothing traps into never sees a register. The APU walks
-     * Xbox physical RAM to find voice buffers, so it gets the guest RAM
-     * base. */
+     * Xbox physical RAM to find voice and DSP buffers. The runtime stores
+     * contiguous allocations in a separate bank, so DMA needs its mapper. */
     if (getenv("RECOMP_AC97_READY")) {
-        g_apu_state = mcpx_apu_init_standalone((uint8_t *)xbox_GetMemoryBase());
+        g_apu_state = mcpx_apu_init_standalone_mapped(
+            (uint8_t *)xbox_GetMemoryBase(), xbox_ApuPhysicalPointer);
         fprintf(stderr, "[BOOT] emulated APU %s\n",
                 g_apu_state ? "up" : "FAILED to initialise");
     }

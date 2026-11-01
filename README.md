@@ -15,18 +15,18 @@ your own disc image, and the C code is generated from it on your machine.
 - Separate runtime worktree: `../xboxrecomp_ss`, branch `serious-sam`, based on
   fork commit `1d9e929`. Turok working trees are not build inputs.
 - Native x64 Release configuration and runtime library build verified.
-- Full disassembly recovered 34,814 function entries from 1,292,133 instructions;
-  ABI analysis completed (2,342 entries detected as `thiscall`).
-- First native D3D11 x64 Release executable built successfully at
-  `build/Release/serious_sam_recomp.exe`. All 34,814 entries translated with zero
-  translation failures (2,544,138 lines of C); 12 unresolved direct-call stubs remain.
-- First isolated boot reached guest startup and kernel/thread initialization,
-  then stalled during CRT initialization/cleanup. The 10-second watchdog ended
-  the run with exit code 3. No menu, graphics or gameplay has been verified.
-- Collected 97 runtime-observed seed candidates in `seeds/runtime_feedback.json`
-  using the toolkit's executable-section/body checks. The next generation pass
-  includes them; the current executable predates that feedback. See
-  [bring-up notes](docs/bringup.md).
+- Regenerated with runtime feedback: 35,103 functions translated with zero
+  failures; 10 unresolved direct-call stubs remain. Native D3D11 x64 Release
+  builds at `build/Release/serious_sam_recomp.exe`.
+- Startup now loads fonts, scripts, menu textures and player models. Guest-object
+  waits, lazy file streams and missing first-run settings have bring-up fixes.
+- Vertical blank interrupts release D3D presentation waits. The APU uses the
+  runtime's physical-memory mapper, allowing startup with the DSP interpreter
+  enabled and without the diagnostic mailbox bypass.
+- Visible output remains black. A Start/Enter probe exits the boot-movie worker
+  and reaches texture setup, then stalls. No menu or gameplay is verified;
+  frame counters are not evidence of correct rendering or performance. See
+  [bring-up notes](docs/bringup.md) for logs and the next investigation.
 
 ## What you need
 
@@ -77,8 +77,20 @@ $env:RECOMP_WATCHDOG_SECS = '20'
 & .\build\Release\serious_sam_recomp.exe 1>stdout.txt 2>stderr.txt
 ```
 
-The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY` and `RECOMP_FB_WINDOW`
-to `1` if unset. `RECOMP_GAME_DIR` and `RECOMP_SAVE_DIR` override runtime file
+The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY`, `RECOMP_FB_WINDOW`,
+`RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`, and
+`RECOMP_VBLANK` to `1` if unset. Use the isolated bring-up probe to enable the
+current stream/settings workarounds and capture bounded logs:
+
+```powershell
+pwsh -File tools/boot-test.ps1 -Seconds 30 -Label native -Visible
+```
+
+`-DspPassthrough` is an optional diagnostic that disables DSP execution and
+acknowledges a fixed observed mailbox. It is no longer required to pass audio
+initialization and does not verify working sound.
+
+`RECOMP_GAME_DIR` and `RECOMP_SAVE_DIR` override runtime file
 and save roots. Saves default to this project's `saves/` directory, separate from
 the runtime's shared default save location. The original XBE is loaded from the extracted disc path in
 `src/main.c`. Use `RECOMP_FPS_LOG=5` for periodic performance logging.
