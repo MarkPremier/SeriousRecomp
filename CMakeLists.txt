@@ -30,7 +30,7 @@ add_compile_definitions(
 #   find_package(xboxrecomp REQUIRED)
 #
 # Adjust this path to point to your xboxrecomp clone:
-set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../xboxrecomp" CACHE PATH
+set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../xboxrecomp_ss" CACHE PATH
     "Path to the xboxrecomp toolkit root directory")
 
 # Add xboxrecomp as a subdirectory -- this builds all 6 runtime libraries
@@ -94,9 +94,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 if(MSVC)
     target_link_options(${PROJECT_NAME} PRIVATE
         /LARGEADDRESSAWARE
+        /MAP
+        /DYNAMICBASE:NO
     )
     # The generated code files can be very large. Increase object file section limit.
     target_compile_options(${PROJECT_NAME} PRIVATE /bigobj)
+    option(RECOMP_LTCG "Link-time code generation for Release builds" ON)
+    if(RECOMP_LTCG)
+        target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/GL>)
+        target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/LTCG>)
+    endif()
 endif()
 
 # ── Game-specific additions ─────────────────────────────────────

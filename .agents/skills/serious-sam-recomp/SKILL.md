@@ -23,7 +23,14 @@ It is in active use by another agent, so **read it, but never modify it** (see
   `Main.gro`, `Movies0.gro`-`Movies5.gro`. The ISO is next to it.
 - `src/main.c`: `YOUR_GAME_ENTRY_POINT` = `0x0003D755`, XBE and game paths point at
   the folder above.
-- No code has been generated yet, and nothing has been built.
+- Update: first native x64 D3D11 Release executable built successfully on
+  2026-11-01 using isolated worktree `P:\Recomp\xboxrecomp_ss` at `1d9e929`.
+  Full disassembly found 34,814 entries; all translated with zero failures.
+  Initial headless boot stalls in startup/cleanup and is ended by the watchdog.
+  No rendering or gameplay verified. Read `docs/bringup.md` for the evidence and
+  next steps. `tools/generate.ps1` is the reproducible pipeline; it includes
+  97 observed candidates in `seeds/runtime_feedback.json` on its next run.
+  The existing executable predates these seeds. User chose to focus on D3D11.
 
 ## XBE facts
 

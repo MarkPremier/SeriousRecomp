@@ -44,6 +44,11 @@ game/
 build_log.txt
 stderr.txt
 stdout.txt
+*_log.txt
+*.log
+analysis/
+test_game/
+saves/
 
 # IDE
 .vscode/
@@ -55,3 +60,6 @@ stdout.txt
 # OS
 Thumbs.db
 .DS_Store
+
+# Local Python environment
+.venv/

@@ -86,6 +86,7 @@ extern ptrdiff_t g_xbox_mem_offset;
 #define YOUR_GAME_ENTRY_POINT   0x0003D755  /* XBE entry point VA */
 #define YOUR_GAME_XBE_PATH      "P:\\Recomp\\SeriousSam\\Serious Sam (USA)\\default.xbe"
 #define YOUR_GAME_DIR            "P:\\Recomp\\SeriousSam\\Serious Sam (USA)"
+#define YOUR_GAME_SAVE_DIR       "P:\\Recomp\\serious_sam\\saves"
 
 /* ── Forward declarations ──────────────────────────────────── */
 
@@ -213,13 +214,17 @@ static void print_guest_context(void *rip)
  * APU's registers were unmapped to be trapped, and every trap was then
  * declined and surfaced as an access violation on the first register
  * DirectSound touched. The VEH below now reaches apu_hook_handle_mmio
- * through the toolkit's xbox_VehMmioFault.
+ * through the fork's APU MMIO handler.
  *
  * Declared rather than included so this does not depend on src/apu being on
  * the include path. */
 typedef struct MCPXAPUState MCPXAPUState;
 extern MCPXAPUState *mcpx_apu_init_standalone(uint8_t *ram_ptr);
 extern MCPXAPUState *g_apu_state;
+extern bool apu_hook_handle_mmio(PCONTEXT ctx, uintptr_t fault_addr,
+                                 uint32_t fault_xbox_va, int is_write);
+extern int xbox_OhciOwnsAddress(uint32_t xbox_va);
+extern int xbox_OhciHandleMmio(void *ctx, uint32_t xbox_va);
 
 static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
 {
@@ -244,8 +249,16 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
          * drives the APU directly, so the registers have to fault to be seen.
          * "Handled" means the access was decoded and the instruction stepped
          * over, so execution resumes instead of unwinding. */
-        if (xbox_VehMmioFault(ep))
-            return EXCEPTION_CONTINUE_EXECUTION;
+        {
+            uint32_t xbox_va = (uint32_t)(fault_addr - (uintptr_t)g_xbox_mem_offset);
+            if (xbox_va >= 0xFE800000u && xbox_va < 0xFE880000u
+                    && apu_hook_handle_mmio(ep->ContextRecord, fault_addr, xbox_va,
+                        ep->ExceptionRecord->ExceptionInformation[0] ? 1 : 0))
+                return EXCEPTION_CONTINUE_EXECUTION;
+            if (xbox_OhciOwnsAddress(xbox_va)
+                    && xbox_OhciHandleMmio(ep->ContextRecord, xbox_va))
+                return EXCEPTION_CONTINUE_EXECUTION;
+        }
 
         fprintf(stderr, "[CRASH] Access violation at RIP=0x%llX, fault addr=0x%llX (%s)\n",
             (unsigned long long)ep->ContextRecord->Rip,
@@ -305,6 +318,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     setvbuf(stderr, NULL, _IONBF, 0);
 
     printf("=== Serious Sam - Static Recompilation ===\n");
+    if (!getenv("RECOMP_PB_EXEC"))
+        _putenv_s("RECOMP_PB_EXEC", "1");
+    if (!getenv("RECOMP_AC97_READY"))
+        _putenv_s("RECOMP_AC97_READY", "1");
+    if (!getenv("RECOMP_FB_WINDOW"))
+        _putenv_s("RECOMP_FB_WINDOW", "1");
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */
@@ -357,7 +376,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* Step 4: Set game directory for file I/O path translation */
     {
         extern void xbox_path_init(const char *game_dir, const char *save_dir);
-        xbox_path_init(YOUR_GAME_DIR, NULL);
+        const char *game_dir = getenv("RECOMP_GAME_DIR");
+        const char *save_dir = getenv("RECOMP_SAVE_DIR");
+        xbox_path_init(game_dir && *game_dir ? game_dir : YOUR_GAME_DIR,
+                       save_dir && *save_dir ? save_dir : YOUR_GAME_SAVE_DIR);
     }
 
     /* Step 5: Initialize kernel bridge (thunk table in Xbox memory) */
