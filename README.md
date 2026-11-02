@@ -73,6 +73,16 @@ Recomp/
   serious_sam/                    this repository
 ```
 
+The runtime is branch `serious-sam` of
+[MarkPremier/xboxrecomp](https://github.com/MarkPremier/xboxrecomp); the
+disassembler is upstream at the commit the Turok project uses:
+
+```powershell
+git clone -b serious-sam https://github.com/MarkPremier/xboxrecomp.git xboxrecomp_ss
+git clone https://github.com/sp00nznet/xboxrecomp.git xboxrecomp
+git -C xboxrecomp checkout f0f8a461496a4f23d9b0aeaa284b8d70ba7ab82b
+```
+
 The local disc is already extracted. From this project directory in PowerShell:
 
 ```powershell
