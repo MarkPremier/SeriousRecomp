@@ -17,6 +17,7 @@ extern void sub_002B78DF(void);
 extern void sub_0019D290(void);
 extern RECOMP_TLS uint32_t g_fs_base;
 extern void sub_0019F5E0_gen(void);
+extern void sub_00367844_gen(void);
 extern void sub_00047B70_gen(void);
 extern void sub_001A0420_gen(void);
 extern void sub_003098A0_gen(void);
@@ -25,6 +26,21 @@ extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 
 #define GUEST32(va) (*(uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+
+/* XDK 4928's idle-voice notifier looks up the owner at DirectSound +0x328.
+ * The asynchronous APU can report a voice after its owner was released; the
+ * original then calls Unlink with this=0. There is no live voice to unlink in
+ * that case. This is the same condition encountered in Turok, using Sam's own
+ * notifier and layout (Turok's owner table is at a different offset). */
+void sub_00367844(void)
+{
+    uint32_t handle = GUEST32(g_esp + 4);
+    if (handle < 256 && !GUEST32(g_ecx + 0x328 + handle * 4)) {
+        g_esp += 8; /* ret 4 */
+        return;
+    }
+    sub_00367844_gen();
+}
 
 /* Writable CTFileStream pages normally enter the two-page flush window through
  * the engine's access-violation handler. Guest RAM is already committed here,
