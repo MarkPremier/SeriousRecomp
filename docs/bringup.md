@@ -503,3 +503,34 @@ finds the main thread fully occupied, with `recomp_fp_round24` a prominent self
 hotspot; the APU/DSP thread is also busy. The user requests 120+ fps gameplay.
 No claim of that target being achieved is made. Extended play, combat, audio
 quality, clean archive-only setup, and stability across levels remain to verify.
+
+## Release optimization and 120+ fps first-level measurements (2026-11-02)
+
+The original local CMake cache had empty `CMAKE_C_FLAGS_RELEASE` (and empty C
+flags for the other configurations). Selecting Release and enabling LTCG did
+not itself enable the compiler optimizer. Native disassembly confirmed an
+out-of-line helper with stack spills and a CRT memcpy call for an eight-byte
+copy. C++ GPU code already had its normal Release optimization flags.
+
+The project now explicitly adds `/O2`, `/Ob2`, and `NDEBUG` to Release builds
+before adding the runtime subdirectory. This fixes both translated game C and
+runtime C even with that existing cache. The executable shrank from approximately
+106 MB to 31 MB. Floating-point precision behavior is unchanged; an experimental
+rounding-helper rewrite gave no benefit on the unoptimized build and was removed.
+The isolated runtime worktree has no changes from this experiment.
+
+Measured with native DSP, native D3D11 RGB565, automatic 3× rendering on the
+3440×1440 monitor, `RECOMP_FPS_LOG=5`, and no GPU/input reporting:
+
+| Run / scene | Five-second FPS samples |
+|---|---|
+| `boot_gameplay_baseline`, active Hatshepsut spawn | 46.6–51.5 (mostly 48–49) |
+| `boot_gameplay_optimized`, same active spawn | 150.3–186.3 |
+| Same optimized run, moving onto ramp / active enemy | 194.6–204.5 |
+| Normal executable launch, active spawn | 140.2–175.2 initially, 157.5–161.5 after resuming |
+
+Loading movies, the loading-screen flyover, and paused frames are excluded from
+the gameplay comparison. The 120+ fps target is reached in this first-level
+sample, not established across the complete game. The normal launch reloaded the
+signed GAME profile without a settings exception. A subsequent idle-voice crash
+is tracked separately below; it must be fixed before calling this stable play.

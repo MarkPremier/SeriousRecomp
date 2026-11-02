@@ -36,8 +36,12 @@ It is in active use by another agent, so **read it, but never modify it** (see
   is initialized; menu direction/select/back and first-level movement are verified.
   Stream close flushes used pages, and update opens prefetch existing contents
   before appending signatures. Worker stream contexts are initialized lazily.
-  Hatshepsut loads with HUD/weapon; initial diagnostic captures are around 50 fps.
-  The user targets 120+ fps in actual gameplay; profile and measure toward that.
+  Hatshepsut loads with HUD/weapon. An empty cached CMAKE_C_FLAGS_RELEASE left the
+  initial Release C code unoptimized. CMake now explicitly applies /O2 /Ob2 and
+  NDEBUG before adding the runtime. The spawn scene improved from 48–52 fps to
+  150–186 fps at automatic 3× scale; the ramp reached 195–205 fps. A normal launch
+  also exceeds 120 fps. The user targets 120+ fps across gameplay, so broaden
+  validation beyond this first scene before claiming that target generally.
   Read `docs/bringup.md` for evidence. Fresh
   archive-only installation is unverified; do not equate the prepared data test
   with a portable release. `tools/generate.ps1` is the reproducible pipeline.

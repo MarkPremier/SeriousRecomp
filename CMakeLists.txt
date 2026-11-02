@@ -21,6 +21,15 @@ add_compile_definitions(
     NOMINMAX
 )
 
+# Make Release optimization part of this project's build contract. An existing
+# CMake cache can have empty CMAKE_C_FLAGS_RELEASE even with a Release config;
+# that left all translated C and the C runtime unoptimized on the first build.
+# Set directory options before adding the runtime so it receives them too.
+if(MSVC)
+    add_compile_options($<$<CONFIG:Release>:/O2> $<$<CONFIG:Release>:/Ob2>)
+    add_compile_definitions($<$<CONFIG:Release>:NDEBUG>)
+endif()
+
 # ── xboxrecomp toolkit ──────────────────────────────────────────
 #
 # Option A: xboxrecomp as a subdirectory (simplest)

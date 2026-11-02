@@ -32,16 +32,19 @@ your own disc image, and the C code is generated from it on your machine.
   submission fix addresses the GPU fence stall exposed by Explorer launching.
 - Fixed occlusion-query completion and registered the title's D3D software-method
   handler, which signals completion events and performs pushbuffer fixups.
-  Sustained menu animation is verified; gameplay and audio quality remain
-  unverified. Sam rising into view is his original entrance animation. See
+  Sustained menu animation is verified. Sam rising into view is his original
+  entrance animation. See
   [bring-up notes](docs/bringup.md) for evidence and the next investigation.
 - Xbox/XInput controller discovery and the guest USB bus are enabled. D-pad,
   left-stick menu movement, A select, B back, and first-level movement are
   verified through USB input reports. The connected Xbox controller is detected.
 - Fixed buffered stream writes and update opens so settings and signed profiles
-  persist. The first Hatshepsut level now loads with its HUD and weapon. Initial
-  diagnostic gameplay captures are around 50 fps; 120+ fps is an optimization
-  target, not an achieved result. Audio quality and extended play remain unverified.
+  persist. The first Hatshepsut level now loads with its HUD and weapon.
+- Release builds explicitly enable optimization for the game and C runtime.
+  Hatshepsut's spawn scene improved from 48–52 fps to roughly 150–186 fps at
+  automatic 3× rendering; moving onto the ramp reached about 195–205 fps.
+  A normal launch also exceeds 120 fps. These are first-level measurements;
+  extended play and audio quality remain unverified.
 
 ## What you need
 
