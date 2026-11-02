@@ -669,3 +669,66 @@ helper fails to connect to its native pipe, including after its documented
 retry/reset procedure. Fence progress and FPS logs are diagnostic evidence,
 not a substitute for visual confirmation. Do not close the intro-freeze or
 post-firing-crash issue yet, or claim a menu/movie performance improvement.
+
+## Options screen: bounded clears and RGB565 (2026-11-02)
+
+Toolkit `0938eda` fixes the cyan Options background and missing upper rows in
+the user's screenshot. The same defect reproduced in a fresh-save pause menu
+and the main menu, on both D3D11 and the diagnostic CPU RGB565 path.
+
+The slider code was requesting sensible small fills. The pushbuffer contained
+inclusive clear edges, for example x=351..436, y=174..187, and packed RGB565
+colour `0xFFE0` for yellow or `0xCCC0` for gold. The executor recorded
+`SET_CLEAR_RECT_HORIZONTAL/VERTICAL` but ignored them when clearing. Every
+slider erased the whole screen, including the preceding labels and background.
+It also interpreted the packed colour as ARGB; `0x0000CCC0` produces cyan.
+
+The executor now intersects the requested clear rectangle with the surface
+clip, handles inclusive maximum edges, and preserves surrounding pixels. The
+software path writes the packed 16-bit clear value directly; the D3D11 adapter
+expands RGB565 to its ARGB clear API. Native partial clears use the existing
+scissored clear shader, preserving GPU rendering rather than reading back the
+whole surface for each slider. Full clears retain the fast path. Depth/stencil
+clears use the same bounded region and keep the unselected component.
+
+Validation:
+
+- New toolkit `tests/nv2a_clear`: real NV097 dispatch and pixel-byte checks for
+  RGB565, ARGB, inclusive rectangles, unchanged surrounding pixels/pitch padding,
+  off-surface rectangles, later full clears, Z16, and separate Z24/stencil
+  clears. Both CPU and GPU/readback tests pass. An isolated build using the
+  original executor fails both at pixel (0,0), which was wrongly overwritten.
+- Release game builds successfully. Temporary diagnostics in generated chunk 1
+  were removed; its hash matches the pre-investigation backup.
+- `options_fixed1` visibly restores the green background, Music Volume, FX
+  Volume, Headphones, Brightness, Blood Color and Gibs. Controller input changes
+  sliders and toggles without corrupting the layout.
+- The fixed normal executable automatically discovers `test_clean`. Using only
+  the probe's save directory, `options_normal_fixed` reloads Music Volume 0.7,
+  Headphones Yes, altered brightness, Blood Color Hippie and Gibs Off after
+  restart. The original user profile was not used for these changes.
+- X opens the default-settings confirmation; choosing Yes restores the normal
+  slider values, Headphones No, Blood Color Red and Gibs On, with the layout
+  and background intact.
+- A normal-launch smoke test reaches Hatshepsut with world, HUD and weapon
+  intact. Opening Options from the gameplay pause menu also shows the complete
+  green layout. This is a short rendering check, not extended combat validation.
+- The optional older `nv2a_texture_cache` harness cannot link: it lacks stubs
+  for `nv2a_pb_exec_batch_spans` and `xbox_FramebufferSize`. Those references
+  predate this change. The new clear regression links the real runtime and
+  passes; no unrelated test harness was changed.
+
+Captures are **runtime framebuffer dumps**, not Windows window captures. They
+match the user's supplied screenshot before the fix. Local evidence:
+`analysis/options_before.bmp`, `analysis/options_after.bmp`,
+`analysis/options_probe1`, `analysis/options_cpu2`, `analysis/options_trace1`,
+`analysis/options_fixed1`, `analysis/options_normal_fixed`, and
+`analysis/test_nv2a_clear*.txt`. Diagnostics enable readbacks and dumps, so
+their FPS values are not a new performance baseline.
+
+The fixed executable and matching map are installed under `build/Release`.
+The previous exe is backed up at `analysis/serious_sam_before_options.exe`;
+renaming it allowed updating the launch path without terminating the user's
+running old session. Relaunch to use the fix. CMake's temporary diagnostic
+output-directory override was removed. No Turok worktree was modified; its
+shadow maps have not been visually retested with this isolated runtime fix.

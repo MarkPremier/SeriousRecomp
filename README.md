@@ -56,6 +56,10 @@ your own disc image, and the C code is generated from it on your machine.
   recursive locks previously saw every thread as ID zero. A regression verifies
   distinct IDs and lock exclusion. This addresses a real synchronization bug;
   its effect on the intermittent intro freeze is still being evaluated.
+- Fixed the cyan Options screen and missing rows in toolkit `0938eda`.
+  Slider fills now honour their clear rectangles and packed RGB565 colours.
+  The green background and all six rows render correctly; controller changes
+  and settings reload are verified with isolated saves and framebuffer captures.
 
 ## What you need
 

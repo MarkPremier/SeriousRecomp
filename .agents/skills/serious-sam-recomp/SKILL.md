@@ -25,6 +25,15 @@ It is in active use by another agent, so **read it, but never modify it** (see
   environment, remembered/portable files, image and developer fallback. The local
   fallback is `serious_sam/test_clean`, the disc hard-linked (xbe + .gro only).
   Normal launches enable the required stream prefetch and keep a crash log.
+- **Options rendering fixed (toolkit `0938eda`):** the cyan screen/missing rows
+  were caused by ignoring NV097 clear rectangles and interpreting packed
+  RGB565 clear colours as ARGB. Both software and native clears now preserve
+  pixels outside the requested rectangle; GPU partial clears use a scissored
+  draw. The normal exe is updated. Isolated-save tests verify the green Options
+  background, all six rows, changing controls, and persistence across restart.
+  Evidence uses runtime flip dumps because the Windows capture helper remains
+  unavailable. New `tests/nv2a_clear` passes on CPU and GPU and fails with the
+  old executor. See the latest bring-up section. Turok files were untouched.
 - **Latest (Claude Code takeover, 2026-11-02):** the toolkit dispatches guest C++
   exceptions to the title's catch blocks (toolkit `3f45f57`), so the game runs
   from the untouched disc data: a fresh install reaches Hatshepsut gameplay at
