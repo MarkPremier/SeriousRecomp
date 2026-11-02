@@ -795,3 +795,39 @@ Evidence: `analysis/menu_perf_baseline4/measurement.json`,
 `analysis/video_cap120_attract1`, and `analysis/video_cap200_final`. All probes use separate save directories and
 archive-only `test_clean` assets. The speculative high-resolution vblank timer
 experiment regressed performance and was discarded; it is not in this build.
+
+### Gameplay profiling with the 200 fps video build
+
+The normal installed exe auto-discovers archive-only `test_clean`. A fresh-save
+script reaches Hatshepsut through Select Player, skill selection and the NETRICSA
+Start prompt. Runtime framebuffer dumps show the world, HUD and pistol intact
+(`analysis/gameplay_profile_visual1`). No video cap is applied to this scene.
+
+A separate run without framebuffer dumps or renderer reports averages **184.9
+fps** at spawn (182.1–187.0 over six complete five-second periods). After a
+six-second forward-stick input, the next measurement has median 161.8 fps,
+range 157.9–221.1; the changing view makes its 172.6 fps average a less useful
+comparison. These are two short first-level samples, not sustained combat or
+whole-game validation. Evidence is in
+`analysis/gameplay_perf200_baseline1/measurement_spawn.json` and
+`measurement_after_forward.json`.
+
+Native unwound sampling is performed separately from those FPS measurements.
+Of 160 title-thread samples, 18 stop in the straight-line matrix/vector helper
+`0x00231BF0`, 15 in `0x00228970`, and 10 each in `0x0021DEF0` and the model
+rendering routine `0x001C6840`. Most samples belong to the scene-rendering call
+tree under `0x002272B0`. The executor thread is waiting in its own loop in 109
+of 160 samples; DMA ownership checks and GPU ordering waits each account for
+nine samples. This points first to CPU-side geometry/model work, rather than
+render resolution, as the next optimization target. It does not measure GPU
+hardware utilization.
+
+In particular, the hot leaf helper repeatedly loads/stores the TLS-backed x87
+stack and masks its index between arithmetic instructions. A narrowly guarded
+generator optimization that keeps straight-line leaf FPU state in native
+locals/registers is a promising next step. It needs bitwise differential tests
+covering every initial stack position, all stack slots, guest rounding modes,
+registers and guest-memory effects before enabling it. No such generator change
+is included in this build, and guest C++ exceptions/call-boundary FPU state must
+continue to work. Stacks: `stacks_title.txt` and `stacks_gpu.txt` beside the
+measurements. No GPL engine code was copied.
