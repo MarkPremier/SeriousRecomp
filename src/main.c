@@ -226,6 +226,7 @@ extern bool apu_hook_handle_mmio(PCONTEXT ctx, uintptr_t fault_addr,
                                  uint32_t fault_xbox_va, int is_write);
 extern int xbox_OhciOwnsAddress(uint32_t xbox_va);
 extern int xbox_OhciHandleMmio(void *ctx, uint32_t xbox_va);
+extern void xbox_OhciInit(void);
 
 static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
 {
@@ -428,6 +429,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         _putenv_s("RECOMP_STREAM_PREFETCH", "1");
     if (!getenv("RECOMP_OPTIONAL_DEFAULTS"))
         _putenv_s("RECOMP_OPTIONAL_DEFAULTS", "1");
+    /* XAPI drives USB directly; zero-filled OHCI registers enumerate no pads.
+     * Xbox controller 1 is root-hub port 3 (zero-based index 2). */
+    if (!getenv("RECOMP_USB"))
+        _putenv_s("RECOMP_USB", "1");
+    if (!getenv("RECOMP_USB_NDP"))
+        _putenv_s("RECOMP_USB_NDP", "4");
+    if (!getenv("RECOMP_USB_PORT"))
+        _putenv_s("RECOMP_USB_PORT", "2");
+    if (!getenv("RECOMP_XINPUT_SLOT"))
+        _putenv_s("RECOMP_XINPUT_SLOT", "auto");
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */
@@ -464,6 +475,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     g_xbox_mem_offset = xbox_GetMemoryOffset();
     printf("Xbox memory mapped. Offset: 0x%llX\n", (unsigned long long)g_xbox_mem_offset);
+
+    xbox_InputInit();
+    xbox_OhciInit();
 
     /* Bring up the emulated APU.
      *
