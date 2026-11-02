@@ -11,6 +11,12 @@ extern ptrdiff_t g_xbox_mem_offset;
 extern void sub_001A6FF0_gen(void);
 extern void sub_0019F1E0_gen(void);
 extern void sub_0019D980(void);
+extern void sub_0019D880(void);
+extern void sub_002B7552(void);
+extern void sub_002B78DF(void);
+extern void sub_0019D290(void);
+extern RECOMP_TLS uint32_t g_fs_base;
+extern void sub_0019F5E0_gen(void);
 extern void sub_00047B70_gen(void);
 extern void sub_001A0420_gen(void);
 extern void sub_003098A0_gen(void);
@@ -19,6 +25,45 @@ extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 
 #define GUEST32(va) (*(uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+
+/* Writable CTFileStream pages normally enter the two-page flush window through
+ * the engine's access-violation handler. Guest RAM is already committed here,
+ * so that window stays empty. Publish every used page through the original
+ * WritePage routine before Close releases the buffer and FILE. Read streams
+ * (+0x5C != 0) and archive streams (no FILE at +0x50) are never written. */
+void sub_0019F5E0(void)
+{
+    uint32_t stream = g_ecx;
+    if (getenv("RECOMP_STREAM_PREFETCH") && stream >= 0x10000 &&
+        stream < 0x08000000 - 0x60 && GUEST32(stream + 0x50) &&
+        !GUEST32(stream + 0x5C)) {
+        uint32_t base = GUEST32(stream + 0xC);
+        uint32_t end = GUEST32(stream + 0x14);
+        uint32_t high = GUEST32(stream + 0x1C);
+        uint32_t limit = GUEST32(stream + 0x10);
+        uint32_t page_size = GUEST32(0x004A1AD0);
+        if (high > end) end = high;
+        if (page_size && base >= 0x10000 && end >= base && end <= limit &&
+            end <= 0x08000000) {
+            uint32_t saved[] = {g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi,
+                                g_esp, g_ebp, g_seh_ebp};
+            uint32_t pages = (end - base + page_size - 1) / page_size;
+            fprintf(stderr, "[STREAM] flush %u page(s), stream=%08X bytes=%u\n",
+                    pages, stream, end - base);
+            for (uint32_t page = 0; page < pages; ++page) {
+                g_ecx = stream;
+                g_esp = saved[6] - 8;
+                GUEST32(g_esp) = 0;
+                GUEST32(g_esp + 4) = page;
+                sub_0019D880();
+            }
+            g_eax = saved[0]; g_ecx = saved[1]; g_edx = saved[2];
+            g_ebx = saved[3]; g_esi = saved[4]; g_edi = saved[5];
+            g_esp = saved[6]; g_ebp = saved[7]; g_seh_ebp = saved[8];
+        }
+    }
+    sub_0019F5E0_gen();
+}
 
 /* XDK 4928 BlockOnTime can wait for an already-issued fence still in the
  * CPU's pending pushbuffer while the movie worker and asset loader run on
@@ -101,12 +146,47 @@ void sub_00047B70(void)
 void sub_0019F1E0(void)
 {
     uint32_t stream = g_ecx, mode = GUEST32(g_esp + 8);
+    if (getenv("RECOMP_STREAM_PREFETCH") && g_fs_base &&
+        GUEST32(0x004A1AE4)) {
+        uint32_t tls_vector = GUEST32(g_fs_base + 4);
+        uint32_t tls_index = GUEST32(0x0047EF68);
+        uint32_t tls = GUEST32(tls_vector + tls_index * 4);
+        if (!GUEST32(tls + 0x10)) {
+            uint32_t saved[] = {g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi,
+                                g_esp, g_ebp, g_seh_ebp};
+            g_esp -= 4;
+            GUEST32(g_esp) = 0;
+            sub_0019D290(); /* Enable the engine's stream context on this worker. */
+            g_eax = saved[0]; g_ecx = saved[1]; g_edx = saved[2];
+            g_ebx = saved[3]; g_esi = saved[4]; g_edi = saved[5];
+            g_esp = saved[6]; g_ebp = saved[7]; g_seh_ebp = saved[8];
+        }
+    }
     sub_0019F1E0_gen();
-    if (mode == 1 && getenv("RECOMP_STREAM_PREFETCH")) {
+    if ((mode == 1 || mode == 2) && getenv("RECOMP_STREAM_PREFETCH")) {
         uint32_t base = GUEST32(stream + 0xC), end = GUEST32(stream + 0x18);
         uint32_t page_size = GUEST32(0x004A1AD0);
         uint32_t saved[] = {g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi,
                             g_esp, g_ebp, g_seh_ebp};
+        /* Append/update opens do not set a read end. Preserve the existing
+         * bytes before a signature or an in-place edit is written into RAM. */
+        if (mode == 2 && GUEST32(stream + 0x50)) {
+            uint32_t file = GUEST32(stream + 0x50);
+            g_esp = saved[6] - 16;
+            GUEST32(g_esp) = 0;
+            GUEST32(g_esp + 4) = file;
+            GUEST32(g_esp + 8) = 0;
+            GUEST32(g_esp + 12) = 2; /* SEEK_END */
+            sub_002B7552();
+            g_esp = saved[6] - 8;
+            GUEST32(g_esp) = 0;
+            GUEST32(g_esp + 4) = file;
+            sub_002B78DF();
+            if ((int32_t)g_eax >= 0 && g_eax <= 0x08000000 - base) {
+                end = base + g_eax;
+                GUEST32(stream + 0x1C) = end;
+            }
+        }
         if (page_size && base >= 0x10000 && end >= base && end < 0x08000000) {
             uint32_t count = (end - base + page_size - 1) / page_size;
             fprintf(stderr, "[STREAM] prefetch %u page(s), stream=%08X bytes=%u\n",

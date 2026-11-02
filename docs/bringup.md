@@ -459,3 +459,47 @@ before sacrificing image resolution. These are menu measurements, not gameplay.
   The later action-looking screen was the recorded attract movie, not gameplay.
 - Runtime commits: `2dd4d90` (query completion) and `f8f9936` (native RGB565).
   Turok and its runtime worktree remain unchanged. No pushes or releases were made.
+
+## Controller input and first level (2026-11-02)
+
+The launcher previously handled OHCI faults but never initialized the controller.
+It now initializes host input and OHCI after mapping guest memory and defaults
+USB on with four root ports, pad on root port index 2, and automatic XInput slot
+selection, following Turok's bus setup. An Xbox/XInput pad is detected in host
+slot 0. Live test reports injected through the existing USB controller path
+verify D-pad and left-stick menu movement, A opening Options, B returning, Start
+skipping the movie, and left-stick movement in Hatshepsut. The diagnostic input
+file is only enabled by `RECOMP_PAD_LIVE`; ordinary launches use the host pad.
+
+Selecting Options exposed a stream-save bug: committed guest RAM never invokes
+the engine's access-violation handler, leaving its two-page flush window empty.
+Close at `0x0019F5E0` now calls the original WritePage (`0x0019D880`) for all used
+pages of writable file streams before the translated close releases the buffer.
+Read-only and archive streams are excluded. Seek high-water and partial final
+pages are retained. A focused regression publishes multiple patterned pages to a
+temporary file before destroying the buffer and verifies exact bytes and guest
+register/stack preservation, including a backwards seek and exact page boundary.
+
+Update mode (`Open_t` mode 2) also needs existing data loaded before modifications.
+Without this, appending the signature rewrote the prior contents as zero bytes.
+The wrapper measures the original FILE with the translated seek/tell routines,
+prefetches through the original ReadPage and retains the file high-water mark.
+Settings now contain 49,152 bytes plus the 20-byte signature; profiles contain
+4,194,304 bytes plus the signature. A profile initially contains the game's TEMP
+placeholder; after a successful first level it begins `GAMESESV` and has a real
+saved state. Diagnostic failed files/UDATA were preserved under `analysis/`.
+
+A loader worker also opened message streams with its engine TLS stream flag
+unset, causing an uncaught C++ exception. When the global stream system exists,
+Open_t now invokes the translated per-thread stream initializer `0x0019D290`
+on such a worker while preserving the caller's guest state. The prepared test
+data additionally needs an empty optional `Data/ExcludedEditorModels.lst`.
+
+`boot_first_level` reaches real Hatshepsut gameplay with HUD, pistol and rendered
+world; forward input moves from the spawn platform toward the temple ramp.
+Initial diagnostic captures are approximately 50 fps. They include GPU reporting
+and sampling overhead and are not the final performance baseline. CPU sampling
+finds the main thread fully occupied, with `recomp_fp_round24` a prominent self
+hotspot; the APU/DSP thread is also busy. The user requests 120+ fps gameplay.
+No claim of that target being achieved is made. Extended play, combat, audio
+quality, clean archive-only setup, and stability across levels remain to verify.

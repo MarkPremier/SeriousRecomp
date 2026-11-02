@@ -32,8 +32,13 @@ It is in active use by another agent, so **read it, but never modify it** (see
   now renders on D3D11, with a CPU fallback available for diagnosis. ZPASS report
   decoding/RAMHT lookup and the title's D3D software-method callback are fixed;
   full animated menus run about 43–49 fps, versus about 11 fps on the CPU path.
-  Sam's rising entrance animation is correct (confirmed by the user). Menu input
-  and gameplay remain unverified. Read `docs/bringup.md` for evidence. Fresh
+  Sam's rising entrance animation is correct (confirmed by the user). USB/XInput
+  is initialized; menu direction/select/back and first-level movement are verified.
+  Stream close flushes used pages, and update opens prefetch existing contents
+  before appending signatures. Worker stream contexts are initialized lazily.
+  Hatshepsut loads with HUD/weapon; initial diagnostic captures are around 50 fps.
+  The user targets 120+ fps in actual gameplay; profile and measure toward that.
+  Read `docs/bringup.md` for evidence. Fresh
   archive-only installation is unverified; do not equate the prepared data test
   with a portable release. `tools/generate.ps1` is the reproducible pipeline.
   User chose D3D11 and explicitly requested performance work.

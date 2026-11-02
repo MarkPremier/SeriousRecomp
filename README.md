@@ -35,6 +35,13 @@ your own disc image, and the C code is generated from it on your machine.
   Sustained menu animation is verified; gameplay and audio quality remain
   unverified. Sam rising into view is his original entrance animation. See
   [bring-up notes](docs/bringup.md) for evidence and the next investigation.
+- Xbox/XInput controller discovery and the guest USB bus are enabled. D-pad,
+  left-stick menu movement, A select, B back, and first-level movement are
+  verified through USB input reports. The connected Xbox controller is detected.
+- Fixed buffered stream writes and update opens so settings and signed profiles
+  persist. The first Hatshepsut level now loads with its HUD and weapon. Initial
+  diagnostic gameplay captures are around 50 fps; 120+ fps is an optimization
+  target, not an achieved result. Audio quality and extended play remain unverified.
 
 ## What you need
 
@@ -106,7 +113,10 @@ $env:RECOMP_WATCHDOG_SECS = '20'
 The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY`, `RECOMP_FB_WINDOW`,
 `RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`, and
 `RECOMP_VBLANK`, `RECOMP_STREAM_PREFETCH`, and `RECOMP_OPTIONAL_DEFAULTS` to `1`
-if unset. Menu input and gameplay still need separate validation.
+if unset. It also defaults `RECOMP_USB=1`, `RECOMP_USB_NDP=4`,
+`RECOMP_USB_PORT=2` (Xbox controller 1), and `RECOMP_XINPUT_SLOT=auto`.
+Connect an Xbox/XInput pad before or during play. Use the D-pad or left stick
+to navigate, A to select, B to return, and Start to skip movies or pause.
 
 Use the isolated bring-up probe to capture bounded logs:
 

@@ -6,6 +6,7 @@
 #include <string.h>
 
 RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi, g_esp, g_ebp, g_seh_ebp;
+RECOMP_TLS uint32_t g_fs_base;
 ptrdiff_t g_xbox_mem_offset;
 volatile uint32_t g_icall_trace[16], g_icall_trace_idx;
 volatile uint64_t g_icall_count;
@@ -39,6 +40,11 @@ void sub_003098A0_gen(void)
 void sub_001A6FF0_gen(void) { abort(); }
 void sub_0019F1E0_gen(void) { abort(); }
 void sub_0019D980(void) { abort(); }
+void sub_0019D880(void) { abort(); }
+void sub_0019F5E0_gen(void) { abort(); }
+void sub_002B7552(void) { abort(); }
+void sub_002B78DF(void) { abort(); }
+void sub_0019D290(void) { abort(); }
 void sub_00047B70_gen(void) { abort(); }
 void sub_001A0420_gen(void) { abort(); }
 
