@@ -65,6 +65,11 @@ your own disc image, and the C code is generated from it on your machine.
   vsync configuration, and common x87 rounding avoids an out-of-line helper
   without changing precision. These are menu results, not a general 120+ fps
   gameplay guarantee. See [bring-up notes](docs/bringup.md) for validation.
+- Rendering corrections: extended x87 constants now load as 80-bit operands,
+  fixing the zero-pitch result for ground-facing stains. Native occlusion
+  reports use actual passing pixels instead of always reporting full visibility,
+  addressing light halos through walls. Mathematical and GPU regressions pass;
+  user gameplay verification of these two effects is pending.
 
 ## What you need
 

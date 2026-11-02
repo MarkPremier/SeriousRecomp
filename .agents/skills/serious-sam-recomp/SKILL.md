@@ -16,6 +16,16 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-02)
 
+- **Effect corrections (2026-11-03):** x87 `fld m80` was emitted as `MEMF`,
+  reading only four of the ten bytes in the CRT asin endpoint's pi/2 constant.
+  The actual generated ground-normal function returned near-zero pitch for
+  `(0,+/-1,0)`; the corrected lifter returns +/-90 degrees. The runtime template
+  now decodes/stores extended operands while retaining its binary64 arithmetic
+  stack. Native ZPASS reports also replace unconditional full-surface visibility
+  with real D3D11 occlusion samples normalized to guest pixels. This addresses
+  the user's upright blood stains and halos through walls. Automated regressions
+  pass; user gameplay verification of these effects is pending. See bring-up
+  notes. Keep Turok worktrees untouched.
 - **Performance update (2026-11-03):** toolkit `668b7f5` inlines common x87
   24-bit rounding with unchanged numerical results; `b83918f` exposes the native
   present interval. The game wrapper bypasses only the engine SwapBuffers

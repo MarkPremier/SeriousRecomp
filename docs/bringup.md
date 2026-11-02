@@ -831,3 +831,82 @@ registers and guest-memory effects before enabling it. No such generator change
 is included in this build, and guest C++ exceptions/call-boundary FPU state must
 continue to work. Stacks: `stacks_title.txt` and `stacks_gpu.txt` beside the
 measurements. No GPL engine code was copied.
+
+## Upright stains and light halos through walls (2026-11-03)
+
+The user supplied two gameplay screenshots: a blood stain standing vertically
+above the floor, and torch halos visible through walls. Both have concrete
+implementation defects, with separate fixes.
+
+### Extended x87 operands and stain pitch
+
+`fld xword ptr [0x00464F82]` in the original CRT asin endpoint loads an 80-bit
+pi/2 constant. The lifter handled 4- and 8-byte operands, then incorrectly fell
+back to `MEMF` for a 10-byte operand. Its low four bytes decode to approximately
+`7.886e-19`, so asin(+/-1) returned nearly zero. The stain placement's ground
+normal became nearly zero pitch instead of +/-90 degrees.
+
+The runtime header now converts the explicit-significand x87 format to the
+existing binary64 stack, with one rounding step, including directed rounding,
+subnormals, signed zero, infinities and NaNs. The lifter emits extended loads
+and stores for 10-byte operands. This does not change the stack to full 80-bit
+arithmetic or relax the existing precision rules.
+
+Validation:
+
+- Twelve lifter FPU tests pass, including 10-byte operand dispatch.
+- All three precision tests pass. The new extended-memory test covers the exact
+  pi/2 encoding, rounding boundaries and one million finite binary64 round trips
+  through extended storage across all four host rounding modes.
+- `analysis/angle_probe` compiles the actual generated CRT and direction-to-angle
+  functions against original disc constants. Both 24- and 53-bit guest precision
+  modes return asin(+/-1)=+/-pi/2 and ground-normal pitch +/-90 degrees, with the
+  expected guest stack balance. Replacing only extended loads with the previous
+  float loads reproduces the near-zero result and fails the same test.
+- Full generation still translates 35,103 functions with zero failures and ten
+  unresolved direct calls. Only four chunks plus generated headers differ from
+  the preceding generation. Original generated files are backed up in
+  `analysis/gen_before_ext80`. Final generation is independently compared below.
+
+### Real occlusion counts
+
+`report_zpass` previously returned `clip_w * clip_h` regardless of depth tests.
+`CLEAR_REPORT_VALUE` and `SET_ZPASS_PIXEL_COUNT_ENABLE` did nothing. This made
+every tested light visible to the title, including lights behind walls.
+
+The native backend now brackets counted draws with D3D11 occlusion queries,
+accumulates across enable/disable intervals until reset, and normalizes scaled
+and multisampled target samples to guest pixels. Reports wait for their actual
+results. CPU raster survivors contribute separately. Result and timestamp are
+written before the completion word is published.
+
+The native regression draws a depth-writing wall, verifies zero samples behind
+it and 1024 visible pixels in front, even with colour/depth writes disabled.
+It also checks cumulative reads, disabled counting, reset while enabled and 2x
+rendering. Both CPU and GPU clear/report tests pass, exercising real NV097 method
+dispatch, the small RAMHT handle, report DMA resolution, unknown report types,
+completion and preservation of following memory. An empty query returns zero.
+
+Local evidence: `analysis/build_effects_query.txt`, `analysis/effects_query1`,
+`analysis/gen_ext80_log.txt`, `analysis/angle_probe`, and
+`analysis/build_effects_final*.txt`. Captures are runtime framebuffer dumps;
+Windows Computer Use still cannot connect to its native pipe after retry/reset.
+The isolated run reached gameplay and killed enemies, but the user's specific
+stain/halo views have not been visually reverified yet. The user offered to test
+the new build. Do not mark both screenshot issues visually verified from these
+mathematical/GPU regressions alone, or use capture-run FPS as a benchmark.
+
+Only the isolated Serious Sam runtime and project were changed. Croteam's public
+source was consulted to identify effect routines; no GPL source was copied or
+adapted. No game files or generated game C are staged for commit.
+
+Toolkit commits: `9e5281d` (extended operands) and `2b25ed3` (occlusion).
+Independent final regeneration under `analysis/gen_ext80_verify` is byte-for-byte
+identical to every installed generated file. The Release build succeeds and is
+installed with its matching map at `build/Release/serious_sam_recomp.exe`, SHA-256
+`0ACD1AB409F1E2957183F945D4E0F30B35102FE371978DD59257F3F54648D646`.
+The preceding executable is `analysis/serious_sam_before_effects.exe`.
+CMake's temporary output-directory override was removed. The existing 200 fps
+video default and unlocked menu/gameplay policies remain in place. No new
+logging-only gameplay performance comparison was made for real occlusion yet;
+query completion now waits for GPU results and its cost needs measurement.
