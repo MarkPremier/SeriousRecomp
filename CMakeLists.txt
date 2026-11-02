@@ -21,13 +21,12 @@ add_compile_definitions(
     NOMINMAX
 )
 
-# Make Release optimization part of this project's build contract. An existing
-# CMake cache can have empty CMAKE_C_FLAGS_RELEASE even with a Release config;
-# that left all translated C and the C runtime unoptimized on the first build.
-# Set directory options before adding the runtime so it receives them too.
-if(MSVC)
-    add_compile_options($<$<CONFIG:Release>:/O2> $<$<CONFIG:Release>:/Ob2>)
-    add_compile_definitions($<$<CONFIG:Release>:NDEBUG>)
+# A first configure once cached every CMAKE_C_FLAGS_* as empty, which built
+# all translated C unoptimized (about 3x slower) without any error. Fail loudly
+# instead; a fresh build directory gets CMake's normal /O2 /Ob2 /DNDEBUG.
+if(MSVC AND NOT CMAKE_C_FLAGS_RELEASE MATCHES "/O2")
+    message(FATAL_ERROR "CMAKE_C_FLAGS_RELEASE is '${CMAKE_C_FLAGS_RELEASE}' "
+        "(no /O2). Delete ${CMAKE_BINARY_DIR}/CMakeCache.txt and configure again.")
 endif()
 
 # ── xboxrecomp toolkit ──────────────────────────────────────────

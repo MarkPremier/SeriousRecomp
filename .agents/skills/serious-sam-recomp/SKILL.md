@@ -23,8 +23,17 @@ It is in active use by another agent, so **read it, but never modify it** (see
   `Main.gro`, `Movies0.gro`-`Movies5.gro`. The ISO is next to it.
 - `src/main.c`: entry point `0x0003D755`. Turok-style game-file discovery checks
   environment, remembered/portable files, image and developer fallback. The local
-  fallback is the isolated, prepared `serious_sam/test_game` folder. Normal launches
-  enable the required stream prefetch and first-run defaults and keep a crash log.
+  fallback is `serious_sam/test_clean`, the disc hard-linked (xbe + .gro only).
+  Normal launches enable the required stream prefetch and keep a crash log.
+- **Latest (Claude Code takeover, 2026-11-02):** the toolkit dispatches guest C++
+  exceptions to the title's catch blocks (toolkit `3f45f57`), so the game runs
+  from the untouched disc data: a fresh install reaches Hatshepsut gameplay at
+  ~185 fps with no placeholder files or settings wrappers (`RECOMP_OPTIONAL_DEFAULTS`
+  is gone). `test_game/` (unpacked Main.gro + placeholders) is obsolete. Open
+  issues, in order: an intermittent BlockOnTime fence stall during the boot movie
+  (4 of 15 clean runs), and a heap-allocator crash after firing in Hatshepsut.
+  See the last section of `docs/bringup.md`. The paragraph below is Codex's
+  earlier history.
 - Update: first native x64 D3D11 Release executable built successfully on
   2026-11-01 using isolated worktree `P:\Recomp\xboxrecomp_ss` at `1d9e929`.
   Current generation contains 35,103 functions, zero failures and 10 unresolved
@@ -175,6 +184,13 @@ Apply these from the start.
    screenshot rather than chasing it.
    The user confirmed Sam's head rising into the menu is his normal entrance
    animation; no position/transform fix is needed for that sequence.
+10. **Before wrapping a missing-file or settings path, check for a C++ throw.**
+    `RECOMP_EXCEPTION_TRACE=1` prints each throw's message; `[EH] ... not caught`
+    or `[EH] continuation ... is not a label` means the exception support needs
+    work, not that the game needs a placeholder file. Verify against `test_clean/`
+    with an empty `RECOMP_SAVE_DIR`, never only against prepared data.
+11. **Check numeric env switches by value, not presence.** `getenv("X")` is true
+    for `X=0`; that bug kept two wrappers on in runs meant to test without them.
 
 ## Do not touch
 

@@ -534,3 +534,79 @@ the gameplay comparison. The 120+ fps target is reached in this first-level
 sample, not established across the complete game. The normal launch reloaded the
 signed GAME profile without a settings exception. A subsequent idle-voice crash
 is tracked separately below; it must be fixed before calling this stable play.
+
+## Takeover: exception handling and clean installs (2026-11-02, Claude Code)
+
+Codex ran out of credits mid-task; this section picks up from its last state.
+
+### DirectSound idle-voice guard (committed `c17fe13`)
+
+Codex's uncommitted wrapper for `sub_00367844` was correct: the crash at return
+`0x00367891` was Unlink with `this=0` for a voice whose owner had left
+DirectSound's table at `+0x328`. Its `ret 4` handling matches the generated
+body (`esp += 8; return;`). With it, `boot_audio_idle_fixed` ran 50 s further.
+
+That run then crashed at `sub_002B6E33 + 0x269`, the C runtime's heap
+allocator (called from the engine's file loading, `0x00197B9B` -> `0x00194DF9`),
+reading guest `0xFFFFFFF5` with `esi = 0`. This looks like heap corruption or a
+bad free and is **not yet investigated**. It happened after firing in
+Hatshepsut (`rt:10000`), about 105 s into the run.
+
+### Release flags
+
+The old `build/` cache had every `CMAKE_C_FLAGS_*` empty, including Debug and
+the base `/DWIN32 /D_WINDOWS`, from a broken first configure. A fresh configure
+gets `/O2 /Ob2 /DNDEBUG`. The forced options are replaced by a configure-time
+check that stops with instructions if `/O2` is missing.
+
+### Guest C++ exceptions (toolkit `3f45f57`)
+
+`RtlRaiseException` used to log a throw and return to the throw site. Serious
+Engine reports a missing file by throwing and catching, so every optional file
+on `T:` needed a placeholder or a wrapper. The toolkit now:
+
+- walks the SEH chain for C++ throws as the kernel does, pushing the
+  dispatcher's own registration that `_UnwindNestedFrames` and
+  `_JumpToContinuation` (`0x002B4625`) expect;
+- in the generator, finds try-block registrations through their
+  `mov eax, FuncInfo; jmp __CxxFrameHandler` (`0x002B46AE`) thunks, labels each
+  catch continuation, and arms a native `setjmp` anchor where the registration
+  is linked into `fs:[0]`;
+- turns `_JumpToContinuation`'s `jmp eax` into a `longjmp` back to that anchor.
+
+Coverage: 160 anchors; 181 of 190 continuations (167 by label, 14 by tail call
+where the analysis split the continuation into its own function). The other 9
+are inside a different piece of a split function and log
+`[EH] continuation ... is not a label` if reached.
+
+The two settings wrappers (`sub_001A0420` GameSettings.gms, `sub_00047B70`
+shell settings) said they existed "until guest C++ unwinding exists" and are
+removed, along with `RECOMP_OPTIONAL_DEFAULTS`. They also had a bug: they
+tested `getenv(...)` for presence, so `RECOMP_OPTIONAL_DEFAULTS=0` still
+enabled them.
+
+### Clean install verified
+
+`test_clean/` holds only `default.xbe`, `Main.gro` and `Movies0-5.gro`
+(hard links to the extracted disc). `clean_play3`: empty save folder, no
+placeholders or wrappers. Player Name -> intro story -> Hatshepsut with HUD and
+knife at about 185 fps. Seven throws, all caught: `DefaultMod.txt`,
+`Scripts\PersistentSymbolsX.ini`, `Scripts\Game_startup.ini`,
+`Temp\ConsoleHistory.txt`, `Data\SeriousSam.gms`,
+`Data\ExcludedEditorModels.lst`, and "Chunk ID validation failed" (first-run
+settings).
+
+### Open: intermittent fence stall at the boot movie
+
+4 of 15 clean runs froze during the Croteam movie while the main thread loaded
+textures. Native samples put the main thread in `sub_003098A0_gen` (XDK
+BlockOnTime) every time: requested fence `0x4E5`, completed `0x4E3`, GPU idle
+(`PUT == GET`). The executor writes every semaphore release it sees without
+filtering, so the releases for `0x4E4`/`0x4E5` never reached it. Codex's
+wrapper only covers a fence issued but not yet kicked off at entry. The
+prepared `test_game/` (loose files, faster loads) did not stall in 4 runs on
+the same build, which points to a timing race between the movie worker and
+the loader rather than to exception handling. Next step: dump the device
+(`0x003143E0`: `+0` put, `+0x2C`, `+0x30` next fence) and the pushbuffer
+around `PUT` when it stalls (`RECOMP_WATCH_STACK=0x003143E0` is wired up for
+this but did not reproduce in 5 runs).

@@ -45,6 +45,13 @@ your own disc image, and the C code is generated from it on your machine.
   automatic 3× rendering; moving onto the ramp reached about 195–205 fps.
   A normal launch also exceeds 120 fps. These are first-level measurements;
   extended play and audio quality remain unverified.
+- **Runs from the untouched disc folder** (2026-11-02). The toolkit now
+  dispatches the game's C++ exceptions to its own catch blocks, so the engine's
+  "file not found, use the default" paths work as on the console. A fresh
+  install with an empty save folder goes from Player Name through the intro to
+  Hatshepsut gameplay (~185 fps) with no placeholder files, loose assets or
+  settings wrappers. Known issue: an intermittent GPU fence stall at the boot
+  movie (seen in 4 of 15 clean runs; see [bring-up notes](docs/bringup.md)).
 
 ## What you need
 
@@ -78,7 +85,9 @@ $cmake = 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\Comm
 ```
 
 `generate.ps1` runs XBE parsing, full disassembly (including Xbox libraries),
-function identification, ABI analysis and C generation in order. It uses explicit
+function identification, ABI analysis and C generation in order. After changing
+only the generator or `src/recomp_manual.c`, `-RecompOnly` reuses the existing
+analysis and regenerates the C in about two minutes. It uses explicit
 per-game analysis directories, excludes manual overrides, and backs up existing
 generated C under `analysis/` before regeneration. Analysis, game data and generated
 C are ignored by Git. The Turok runtime is never used as a shared output directory.
@@ -86,37 +95,35 @@ C are ignored by Git. The Turok runtime is never used as a shared output directo
 ## Running and diagnostics
 
 For this development checkout, double-click
-`build/Release/serious_sam_recomp.exe`. The local build falls back to the prepared
-`test_game/` data used for bring-up. No probe script or environment setup is
-required for movie playback.
+`build/Release/serious_sam_recomp.exe`. The local build falls back to
+`test_clean/` (below). No probe script or environment setup is required.
 
 The launcher checks an explicit `RECOMP_GAME_DIR`, a remembered folder in
 `serious_sam_settings.ini`, `game/` beside the executable, an adjacent ISO/XISO,
 then the developer fallback. Otherwise it offers a file picker. It verifies the
-USA `default.xbe` SHA-1 before loading. Discovery and disc extraction were adapted
-from Turok; a fresh install using only the disc archives has not yet been
-validated. Current verification uses prepared loose assets and first-run files
-in `test_game/` (see [bring-up notes](docs/bringup.md)).
+USA `default.xbe` SHA-1 before loading. The game needs only what is on the disc:
+`default.xbe`, `Main.gro` and `Movies0-5.gro`.
 
 Explorer launches write `serious_sam_log.txt` beside the executable and retain
 the preceding run as `serious_sam_log.prev.txt`. Redirected stderr remains usable
 for diagnostic probes. Saves default to `saves/` within the selected game folder;
 `RECOMP_SAVE_DIR` overrides this. Use a separate game/saves copy for testing.
 
-Copy the extracted game folder to `test_game/` before boot testing. Keep the copy
-and saves local; do not commit either. Then run:
+For testing, hard-link the extracted disc into `test_clean/`. It takes no extra
+space, and the game's saves and cache files stay out of the original folder:
 
 ```powershell
-$env:RECOMP_GAME_DIR = "$PWD\test_game"
-$env:RECOMP_SAVE_DIR = "$PWD\test_game\saves"
-$env:RECOMP_WATCHDOG_SECS = '20'
-& .\build\Release\serious_sam_recomp.exe 1>stdout.txt 2>stderr.txt
+New-Item -ItemType Directory test_clean | Out-Null
+Get-ChildItem '..\SeriousSam\Serious Sam (USA)' -File | ForEach-Object {
+    New-Item -ItemType HardLink -Path "test_clean\$($_.Name)" -Target $_.FullName }
 ```
 
+`test_game/` is the older bring-up folder with every `Main.gro` entry unpacked
+and placeholder files added; it is no longer needed.
+
 The launcher defaults `RECOMP_PB_EXEC`, `RECOMP_AC97_READY`, `RECOMP_FB_WINDOW`,
-`RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`, and
-`RECOMP_VBLANK`, `RECOMP_STREAM_PREFETCH`, and `RECOMP_OPTIONAL_DEFAULTS` to `1`
-if unset. It also defaults `RECOMP_USB=1`, `RECOMP_USB_NDP=4`,
+`RECOMP_TITLE_KEVENTS`, `RECOMP_HEAP_RECLAIM`, `RECOMP_NV2A_NATIVE_FENCES`,
+`RECOMP_VBLANK` and `RECOMP_STREAM_PREFETCH` to `1` if unset. It also defaults `RECOMP_USB=1`, `RECOMP_USB_NDP=4`,
 `RECOMP_USB_PORT=2` (Xbox controller 1), and `RECOMP_XINPUT_SLOT=auto`.
 Connect an Xbox/XInput pad before or during play. Use the D-pad or left stick
 to navigate, A to select, B to return, and Start to skip movies or pause.
@@ -125,7 +132,14 @@ Use the isolated bring-up probe to capture bounded logs:
 
 ```powershell
 pwsh -File tools/boot-test.ps1 -Seconds 30 -Label native -Visible
+# from a PowerShell session, to pass extra settings:
+& .\tools\boot-test.ps1 -Seconds 30 -Label fresh -Visible `
+    -ExtraEnv @{RECOMP_SAVE_DIR = "$PWD\test_clean\saves_fresh"}
 ```
+
+`-GameDir` selects another game folder (default `test_clean/`).
+`RECOMP_EH_DISPATCH=0` turns off C++ exception dispatch (throws then return to
+the throw site, as before) for comparison.
 
 `-DspPassthrough` is an optional diagnostic that disables DSP execution and
 acknowledges a fixed observed mailbox. It is no longer required to pass audio

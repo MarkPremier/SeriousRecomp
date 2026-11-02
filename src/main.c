@@ -84,7 +84,7 @@ extern ptrdiff_t g_xbox_mem_offset;
  * Remembered and portable game folders take precedence over this fallback.
  */
 #define YOUR_GAME_ENTRY_POINT   0x0003D755  /* XBE entry point VA */
-#define YOUR_GAME_DIR            "P:\\Recomp\\serious_sam\\test_game"
+#define YOUR_GAME_DIR            "P:\\Recomp\\serious_sam\\test_clean"
 static char s_game_dir[MAX_PATH], s_xbe_path[MAX_PATH], s_save_dir[MAX_PATH];
 
 /* ── Forward declarations ──────────────────────────────────── */
@@ -424,11 +424,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* D3D Present waits on the title's vblank event, including the movie worker. */
     if (!getenv("RECOMP_VBLANK"))
         _putenv_s("RECOMP_VBLANK", "1");
-    /* These are required for normal startup too, not just diagnostic probes. */
+    /* Required for normal startup too, not just diagnostic probes. */
     if (!getenv("RECOMP_STREAM_PREFETCH"))
         _putenv_s("RECOMP_STREAM_PREFETCH", "1");
-    if (!getenv("RECOMP_OPTIONAL_DEFAULTS"))
-        _putenv_s("RECOMP_OPTIONAL_DEFAULTS", "1");
     /* XAPI drives USB directly; zero-filled OHCI registers enumerate no pads.
      * Xbox controller 1 is root-hub port 3 (zero-based index 2). */
     if (!getenv("RECOMP_USB"))

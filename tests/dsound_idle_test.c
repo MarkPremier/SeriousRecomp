@@ -21,8 +21,6 @@ void sub_0019D880(void) { abort(); }
 void sub_002B7552(void) { abort(); }
 void sub_002B78DF(void) { abort(); }
 void sub_0019D290(void) { abort(); }
-void sub_00047B70_gen(void) { abort(); }
-void sub_001A0420_gen(void) { abort(); }
 void sub_003098A0_gen(void) { abort(); }
 void sub_00309700(void) { abort(); }
 static void run(uint32_t handle, uint32_t owner, unsigned expected)

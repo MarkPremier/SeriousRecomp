@@ -2,14 +2,18 @@ param(
     [ValidateRange(1, 300)][int]$Seconds = 15,
     [string]$Label = 'latest',
     [switch]$Visible,
-    [switch]$DspPassthrough
+    [switch]$DspPassthrough,
+    # Game folder to run against (default: test_clean, the disc hard-linked).
+    [string]$GameDir,
+    # Extra or overriding environment settings, e.g. @{RECOMP_EH_DISPATCH='0'}.
+    [hashtable]$ExtraEnv = @{}
 )
 $ErrorActionPreference = 'Stop'
 $projectDir = Split-Path $PSScriptRoot -Parent
 if ($Label -notmatch '^[a-zA-Z0-9_-]+$') { throw 'Use a simple label without path separators.' }
-$gameDir = Join-Path $projectDir 'test_game'
+$gameDir = if ($GameDir) { (Resolve-Path $GameDir).Path } else { Join-Path $projectDir 'test_clean' }
 if (-not (Test-Path (Join-Path $gameDir 'Main.gro'))) {
-    throw 'Copy the extracted disc into test_game before running a boot probe.'
+    throw "No Main.gro in $gameDir; copy the extracted disc there first."
 }
 $logDir = Join-Path $projectDir "analysis\boot_$Label"
 New-Item -ItemType Directory -Force $logDir | Out-Null
@@ -24,9 +28,9 @@ $settings = @{
     RECOMP_FB_WINDOW = $(if ($Visible) { '1' } else { '0' })
     RECOMP_FPS_LOG = '5'
     RECOMP_STREAM_PREFETCH = '1'
-    RECOMP_OPTIONAL_DEFAULTS = '1'
     RECOMP_EXCEPTION_TRACE = '1'
 }
+foreach ($name in $ExtraEnv.Keys) { $settings[$name] = "$($ExtraEnv[$name])" }
 if ($DspPassthrough) {
     $settings['RECOMP_APU_DSP'] = '0'
     $settings['RECOMP_DSP_ACK'] = '0x803A4810'

@@ -1,7 +1,9 @@
 param(
     [string]$Xbe = 'P:\Recomp\SeriousSam\Serious Sam (USA)\default.xbe',
     [string]$Disassembler = 'P:\Recomp\xboxrecomp',
-    [string]$Toolkit = 'P:\Recomp\xboxrecomp_ss'
+    [string]$Toolkit = 'P:\Recomp\xboxrecomp_ss',
+    # Reuse the existing disassembly and analysis; regenerate only the C.
+    [switch]$RecompOnly
 )
 $ErrorActionPreference = 'Stop'
 $projectDir = Split-Path $PSScriptRoot -Parent
@@ -20,6 +22,7 @@ function Invoke-PipelineStep([string[]]$Arguments) {
 $previousBytecode = $env:PYTHONDONTWRITEBYTECODE
 $env:PYTHONDONTWRITEBYTECODE = '1'
 try {
+    if (-not $RecompOnly) {
     Push-Location $Disassembler
     try {
         Invoke-PipelineStep @('-m', 'tools.xbe_parser', $Xbe, '--json', "$analysis\xbe.json")
@@ -30,13 +33,16 @@ try {
         }
         Invoke-PipelineStep $disasmArgs
     } finally { Pop-Location }
+    }
     Push-Location $Toolkit
     try {
+        if (-not $RecompOnly) {
         Invoke-PipelineStep @('-m', 'tools.func_id', $Xbe,
             '--functions', "$disasm\functions.json", '--strings', "$disasm\strings.json",
             '--xrefs', "$disasm\xrefs.json", '--output', "$analysis\func_id")
         Invoke-PipelineStep @('-m', 'tools.abi_analysis', $Xbe, '--disasm-dir', $disasm,
             '--func-id-dir', "$analysis\func_id", '--output-dir', "$analysis\abi")
+        }
         Invoke-PipelineStep @('-u', '-m', 'tools.recomp', $Xbe, '--all', '--split', '250',
             '--game-name', 'Serious Sam', '--disasm-dir', $disasm,
             '--func-id-dir', "$analysis\func_id", '--abi-dir', "$analysis\abi",

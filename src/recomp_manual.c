@@ -18,8 +18,6 @@ extern void sub_0019D290(void);
 extern RECOMP_TLS uint32_t g_fs_base;
 extern void sub_0019F5E0_gen(void);
 extern void sub_00367844_gen(void);
-extern void sub_00047B70_gen(void);
-extern void sub_001A0420_gen(void);
 extern void sub_003098A0_gen(void);
 extern void sub_00309700(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
@@ -107,53 +105,6 @@ void sub_003098A0(void)
         g_esp = saved[6]; g_ebp = saved[7]; g_seh_ebp = saved[8];
     }
     sub_003098A0_gen();
-}
-
-/* FileExists uses an Open_t try/catch in the XBE. Preserve its false result
- * for an absent first-run GameSettings.gms without entering the throw path. */
-void sub_001A0420(void)
-{
-    uint32_t name_object = GUEST32(g_esp + 4);
-    uint32_t name = GUEST32(name_object);
-    const char *root = getenv("RECOMP_GAME_DIR");
-    if (root && getenv("RECOMP_OPTIONAL_DEFAULTS") &&
-        name >= 0x10000 && name < 0x08000000 &&
-        _stricmp((const char *)((uintptr_t)g_xbox_mem_offset + name),
-                 "GameSettings.gms") == 0) {
-        char path[MAX_PATH], override_path[MAX_PATH];
-        snprintf(path, sizeof path, "%s\\GameSettings.gms", root);
-        snprintf(override_path, sizeof override_path,
-                 "%s\\TDATA\\54540004\\GameSettings.gms", root);
-        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES &&
-            GetFileAttributesA(override_path) == INVALID_FILE_ATTRIBUTES) {
-            fprintf(stderr, "[SETTINGS] first-run GameSettings.gms does not exist\n");
-            g_eax = 0;
-            g_esp += 4;
-            return;
-        }
-    }
-    sub_001A0420_gen();
-}
-
-/* First-run shell settings are optional: the original caller catches a missing
- * file and keeps its constructor defaults. Until guest C++ unwinding exists,
- * avoid entering that missing-file path; existing settings still use the game. */
-void sub_00047B70(void)
-{
-    const char *root = getenv("RECOMP_GAME_DIR");
-    if (root && getenv("RECOMP_OPTIONAL_DEFAULTS")) {
-        char path[MAX_PATH], override_path[MAX_PATH];
-        snprintf(path, sizeof path, "%s\\Data\\SeriousSam.gms", root);
-        snprintf(override_path, sizeof override_path,
-                 "%s\\TDATA\\54540004\\Data\\SeriousSam.gms", root);
-        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES &&
-            GetFileAttributesA(override_path) == INVALID_FILE_ATTRIBUTES) {
-            fprintf(stderr, "[SETTINGS] no shell settings file; retaining first-run defaults\n");
-            g_esp += 4;
-            return;
-        }
-    }
-    sub_00047B70_gen();
 }
 
 /* Open_t reserves a lazy stream buffer; the console fills it through SEH page
