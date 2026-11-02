@@ -28,7 +28,7 @@ your own disc image, and the C code is generated from it on your machine.
   surfaces. Menu measurements improved from roughly 11 fps to 43–49 fps,
   including automatic 3× rendering on this monitor.
 - The launcher follows Turok's file discovery and crash-log workflow. Required
-  stream/settings defaults also apply to normal launches. A pending-command
+  stream prefetch also applies to normal launches. A pending-command
   submission fix addresses the GPU fence stall exposed by Explorer launching.
 - Fixed occlusion-query completion and registered the title's D3D software-method
   handler, which signals completion events and performs pushbuffer fixups.
@@ -40,7 +40,7 @@ your own disc image, and the C code is generated from it on your machine.
   verified through USB input reports. The connected Xbox controller is detected.
 - Fixed buffered stream writes and update opens so settings and signed profiles
   persist. The first Hatshepsut level now loads with its HUD and weapon.
-- Release builds explicitly enable optimization for the game and C runtime.
+- Release configuration checks that C optimization flags are present.
   Hatshepsut's spawn scene improved from 48–52 fps to roughly 150–186 fps at
   automatic 3× rendering; moving onto the ramp reached about 195–205 fps.
   A normal launch also exceeds 120 fps. These are first-level measurements;
@@ -52,6 +52,10 @@ your own disc image, and the C code is generated from it on your machine.
   Hatshepsut gameplay (~185 fps) with no placeholder files, loose assets or
   settings wrappers. Known issue: an intermittent GPU fence stall at the boot
   movie (seen in 4 of 15 clean runs; see [bring-up notes](docs/bringup.md)).
+- Corrected guest thread identities in toolkit commit `6c87b8c`: the game's
+  recursive locks previously saw every thread as ID zero. A regression verifies
+  distinct IDs and lock exclusion. This addresses a real synchronization bug;
+  its effect on the intermittent intro freeze is still being evaluated.
 
 ## What you need
 

@@ -32,7 +32,20 @@ It is in active use by another agent, so **read it, but never modify it** (see
   is gone). `test_game/` (unpacked Main.gro + placeholders) is obsolete. Open
   issues, in order: an intermittent BlockOnTime fence stall during the boot movie
   (4 of 15 clean runs), and a heap-allocator crash after firing in Hatshepsut.
-  See the last section of `docs/bringup.md`. The paragraph below is Codex's
+  Toolkit `6c87b8c` now gives the main thread and workers nonzero, distinct XAPI
+  thread IDs (`fs:[0x28] + 0x12C`). Previously every thread returned zero, so
+  Serious Engine's recursive locks bypassed exclusion. The new synthetic-XBE
+  regression fails against the prior runtime and passes with the fix. Do not
+  call the intro freeze or firing crash fixed from that result alone. This
+  session's baseline startup probes did not reproduce the intermittent freeze.
+  Twenty post-fix 30-second archive-only probes also completed without a
+  detected stall/crash; startup FPS was 31.4–32.3, not a new gameplay result.
+  A separate 75-second normal launch auto-discovered `test_clean` and kept
+  presenting frames (later 26.7–29.2 fps); phase/visual correctness is pending.
+  Windows Computer Use currently fails to connect to its native pipe, so new
+  actual-window verification is pending; do not equate fence progress with
+  visual confirmation. See the last section of `docs/bringup.md` for results.
+  The paragraph below is Codex's
   earlier history.
 - Update: first native x64 D3D11 Release executable built successfully on
   2026-11-01 using isolated worktree `P:\Recomp\xboxrecomp_ss` at `1d9e929`.
@@ -46,14 +59,15 @@ It is in active use by another agent, so **read it, but never modify it** (see
   Stream close flushes used pages, and update opens prefetch existing contents
   before appending signatures. Worker stream contexts are initialized lazily.
   Hatshepsut loads with HUD/weapon. An empty cached CMAKE_C_FLAGS_RELEASE left the
-  initial Release C code unoptimized. CMake now explicitly applies /O2 /Ob2 and
-  NDEBUG before adding the runtime. The spawn scene improved from 48–52 fps to
+  initial Release C code unoptimized. A fresh cache supplies /O2 /Ob2 and
+  NDEBUG; CMake checks the Release optimization flags. The spawn scene improved
+  from 48–52 fps to
   150–186 fps at automatic 3× scale; the ramp reached 195–205 fps. A normal launch
   also exceeds 120 fps. The user targets 120+ fps across gameplay, so broaden
   validation beyond this first scene before claiming that target generally.
   Read `docs/bringup.md` for evidence. Fresh
-  archive-only installation is unverified; do not equate the prepared data test
-  with a portable release. `tools/generate.ps1` is the reproducible pipeline.
+  archive-only installation was subsequently verified by Claude as described
+  above. `tools/generate.ps1` is the reproducible pipeline.
   User chose D3D11 and explicitly requested performance work.
 
 ## XBE facts

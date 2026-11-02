@@ -610,3 +610,62 @@ the loader rather than to exception handling. Next step: dump the device
 (`0x003143E0`: `+0` put, `+0x2C`, `+0x30` next fence) and the pushbuffer
 around `PUT` when it stalls (`RECOMP_WATCH_STACK=0x003143E0` is wired up for
 this but did not reproduce in 5 runs).
+
+## Thread identity and intro-race investigation (2026-11-02, Codex)
+
+Toolkit commit `6c87b8c` fixes a synchronization defect found while investigating
+the intro stall. The title's XAPI `GetCurrentThreadId` at `0x0003E560` reads
+`fs:[0x28]`, then `[record + 0x12C]`. The main record's ID was zero and workers
+inherited the same record pointer. A live pre-fix memory read confirmed
+`[0x4028] = 0x00760000`, `[0x0076012C] = 0`.
+
+Serious Engine's recursive lock routines (`0x001F76A0`, `0x001F75F0`) compare
+that ID with the owner at lock `+4`. Distinct threads therefore mistook an
+already-held lock for recursion and entered together. This can race shared
+engine state. It is a plausible contributor to the intro submission race and
+shell-parser/allocator failure, not proof of either failure's cause.
+
+The loader now stamps the main record with its host thread ID. Each worker's
+TIB allocation includes a private current-thread record with that worker's ID.
+The existing shared RW pointer and private image TLS/SEH initialization are
+preserved. The allocator's existing no-TLS early return is unchanged; this
+regression covers images with a TLS directory, including Serious Sam.
+
+Validation:
+
+- `tests/thread_identity` in the toolkit loads a synthetic XBE, starts three
+  workers and checks distinct nonzero IDs, private records, the shared RW
+  compatibility pointer, SEH heads and recursive-lock exclusion. The test fails
+  against the original committed memory implementation and passes with the fix.
+- Release game build succeeds. Kernel bridge regression passes; all three game
+  manual-wrapper regressions pass.
+- Memory regressions: default, heap reclaim and 128 MB extended-VMA modes pass.
+  The 64 MB extended-VMA test fails eight assertions because it never selects
+  64 MB and the runtime defaults to 128 MB. An isolated build using the original
+  committed memory implementation reproduces the same eight failures. No memory
+  allocation or RAM-size policy was changed by this fix.
+- Before the fix, 20 archive-only startup probes of 25–30 s, plus two longer
+  probes, did not reproduce the freeze this session. After the fix, 20 more
+  30-second probes completed with advancing fences and no detected stall or
+  crash. Each run uses archive-only assets in `test_clean` and its own empty
+  save directory. Startup FPS samples were 31.4–32.3; these are not gameplay
+  measurements and establish no performance improvement.
+- A separate 75-second launch from `build/Release`, with all inherited
+  `RECOMP_*` switches cleared except an isolated save directory, FPS logging
+  and the watchdog, automatically discovered `test_clean`. Frame presentation
+  continued throughout with no crash; later samples were 26.7–29.2 fps. The
+  phase was not visually verified. This confirms normal file discovery and
+  continuing presentation, not menu correctness or playable performance.
+
+Evidence is retained in `analysis/intro_race_baseline*`,
+`analysis/intro_identity_fixed`, `analysis/test_identity_baseline.txt`, and
+`analysis/build_thread_identity*.txt`; the normal-launch logs are under
+`analysis/intro_identity_normal`. The local `analysis/repro_intro.py`
+monitors next/completed fences and ring PUT/GET, captures a stalled device and
+ring, and leaves only a detected stalled probe alive for inspection.
+
+Actual-window verification is pending this session: the Windows Computer Use
+helper fails to connect to its native pipe, including after its documented
+retry/reset procedure. Fence progress and FPS logs are diagnostic evidence,
+not a substitute for visual confirmation. Do not close the intro-freeze or
+post-firing-crash issue yet, or claim a menu/movie performance improvement.
