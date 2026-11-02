@@ -732,3 +732,66 @@ renaming it allowed updating the launch path without terminating the user's
 running old session. Relaunch to use the fix. CMake's temporary diagnostic
 output-directory override was removed. No Turok worktree was modified; its
 shadow maps have not been visually retested with this isolated runtime fix.
+
+## Menu performance and video presentation (2026-11-03)
+
+The matched menu benchmark improved from **31.5 fps to 76.8 fps** at automatic
+3× rendering. Measurements use `RECOMP_FPS_LOG=5` without frame dumps, batch
+reports or sampling, on the animated main menu. The old build ranged from
+28.8–33.4 fps with worst frames of 92–202 ms; the optimized build ranged from
+72.1–89.0 fps with worst frames of 19–34 ms. These are local menu measurements,
+not proof of sustained 120+ fps throughout gameplay.
+
+Two changes account for this improvement:
+
+- Toolkit `668b7f5` forces the common 24-bit x87 rounding path inline. Ordinary
+  float-range magnitudes take one range comparison and a float conversion;
+  unusual exponents keep the original exponent-preserving slow path. Precision
+  and host rounding modes are unchanged. Four million binary64 patterns plus
+  boundary, NaN, infinity and signed-zero cases match the original helper under
+  all four host rounding modes. Math alone measured 34.6 fps.
+- The engine's SwapBuffers call to BlockUntilVerticalBlank returns immediately
+  when the native presenter is configured without vsync. Native stack sampling
+  found 50 of 80 main-thread snapshots in that wait. The override checks the
+  specific return address `0x001A95B8`; direct XMV wait sites and unknown callers
+  retain the original function. Vsync intervals 1–4 retain the wait too. Toolkit
+  `b83918f` exposes the existing presentation interval to the title wrapper.
+
+The four game wrapper tests and both precision tests pass. A separate generation
+into `analysis/menu_gen_verify` confirms that `--exclude-manual` retains the
+original generated wait body and produces the optimized precision header:
+35,103 functions, zero translation failures, ten unresolved direct-call stubs.
+Runtime framebuffer captures in `analysis/menu_perf_normal_visual` show the
+complete animated menu. Dump/readback runs are not performance baselines.
+
+The user confirmed that movies showing 1000+ fps still animate at normal speed.
+An older diagnostic run already showed repeated full-screen 640×480 YUY2 draws
+at 1400–1900 fps; this was not introduced by the menu wait override. Video
+presentation now has a separate `RECOMP_VIDEO_FPS_CAP`, default **200** in the
+Serious Sam launcher. Set it to `0` to disable. The executor identifies actual
+full-screen/letterboxed packed-YUV draws rather than a stale texture binding,
+and also handles the PVIDEO overlay. A normal menu/world draw removes the video
+limit. The decoder and audio clocks are unchanged. A lower global numeric cap
+still takes precedence; explicit global `vblank` remains supported.
+
+The initial 60 fps trial held 60.0 fps across six measured periods, but the user
+reported stutter and requested 120, then 200. The 120 trial settled at
+119–120 fps. Deadline tests cover 60/120/200 pacing,
+late frames, changing caps, entering video and returning to unlocked rendering.
+Empty flips retain the preceding surface's video classification, avoiding a
+deadline reset between video draws. The installed build's logging-only attract
+movie trial averaged **195.0 fps**, ranging 190.2–197.9 across five complete
+five-second periods. This is presentation throughput, not decoded frame rate.
+The exe SHA-256 is
+`A3C7BC14AE15420B35B56B8974EA2D581DCAA1E700FC73781AEEAB6D3C33140B`;
+its matching map is installed under `build/Release`. The preceding menu-optimized
+exe is `analysis/serious_sam_before_video_cap.exe`. The temporary CMake output
+override was removed. Toolkit video pacing is commit `94e9418`.
+
+Evidence: `analysis/menu_perf_baseline4/measurement.json`,
+`analysis/menu_fp_fast1/measurement.json`,
+`analysis/menu_native_pacing1/measurement.json`,
+`analysis/menu_perf_scene2/stacks_main.txt`, `analysis/video_cap_attract1`, and
+`analysis/video_cap120_attract1`, and `analysis/video_cap200_final`. All probes use separate save directories and
+archive-only `test_clean` assets. The speculative high-resolution vblank timer
+experiment regressed performance and was discarded; it is not in this build.

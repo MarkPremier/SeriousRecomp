@@ -60,6 +60,11 @@ your own disc image, and the C code is generated from it on your machine.
   Slider fills now honour their clear rectangles and packed RGB565 colours.
   The green background and all six rows render correctly; controller changes
   and settings reload are verified with isolated saves and framebuffer captures.
+- Menu optimization: matched, logging-only measurements improved from 31.5 to
+  76.8 fps at automatic 3× rendering. The engine swap path now follows native
+  vsync configuration, and common x87 rounding avoids an out-of-line helper
+  without changing precision. These are menu results, not a general 120+ fps
+  gameplay guarantee. See [bring-up notes](docs/bringup.md) for validation.
 
 ## What you need
 
@@ -168,6 +173,10 @@ The original XBE is loaded from the selected game folder. Use
 `RECOMP_CPU_RGB565=1` restores the slower CPU colour fallback for diagnosis.
 `RECOMP_RENDER_SCALE=1` selects original resolution; the runtime otherwise uses
 automatic scaling. Lowering it gave little menu-speed improvement in this test.
+`RECOMP_VIDEO_FPS_CAP` defaults to `200` for full-screen packed-YUV movies;
+set it to `0` to disable the video limit. Movie animation already runs at normal
+speed; the limit avoids repeatedly presenting the same decoded frames. Menus
+and gameplay remain unlocked unless native vsync or `RECOMP_FPS_CAP` is set.
 Release builds emit a linker map with a fixed image base for crash symbolization:
 
 ```powershell

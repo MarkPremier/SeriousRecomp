@@ -23,6 +23,8 @@ void sub_002B78DF(void) { abort(); }
 void sub_0019D290(void) { abort(); }
 void sub_003098A0_gen(void) { abort(); }
 void sub_00309700(void) { abort(); }
+void sub_003041E0_gen(void) { abort(); }
+int xbox_GetPresentInterval(void) { return 0; }
 static void run(uint32_t handle, uint32_t owner, unsigned expected)
 {
     g_ecx = DSOUND; g_eax = 1; g_edx = 2; g_esp = STACK;

@@ -427,6 +427,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* Required for normal startup too, not just diagnostic probes. */
     if (!getenv("RECOMP_STREAM_PREFETCH"))
         _putenv_s("RECOMP_STREAM_PREFETCH", "1");
+    /* XMV timing is already real-time; avoid thousands of repeated presents
+     * while keeping menus and gameplay at their native unlocked rate. */
+    if (!getenv("RECOMP_VIDEO_FPS_CAP"))
+        _putenv_s("RECOMP_VIDEO_FPS_CAP", "200");
     /* XAPI drives USB directly; zero-filled OHCI registers enumerate no pads.
      * Xbox controller 1 is root-hub port 3 (zero-based index 2). */
     if (!getenv("RECOMP_USB"))

@@ -16,6 +16,18 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-02)
 
+- **Performance update (2026-11-03):** toolkit `668b7f5` inlines common x87
+  24-bit rounding with unchanged numerical results; `b83918f` exposes the native
+  present interval. The game wrapper bypasses only the engine SwapBuffers
+  vblank wait at caller `0x001A95B8` when native vsync is off. Direct XMV waits
+  and enabled vsync retain original semantics. Matched logging-only main-menu
+  measurements improved 31.5 to 76.8 fps at automatic 3× scale. Four wrapper
+  tests and two precision tests pass. The user confirmed 1000+ fps movie
+  animation is normally timed. Full-screen packed-YUV video presentation has
+  a separate `RECOMP_VIDEO_FPS_CAP`, default 200 at the user's request after
+  trials of 60 and 120. It does not cap menus/gameplay or change decoder clocks.
+  See the latest bring-up section for verification and remaining work. Do not
+  claim sustained gameplay at 120+ fps or that historical crashes are solved.
 - Repo: `P:\Recomp\serious_sam`, branch `main`, remote
   `https://github.com/MarkPremier/SeriousRecomp` (private). It contains the
   xboxrecomp `templates/new-game` scaffold, renamed for this game.

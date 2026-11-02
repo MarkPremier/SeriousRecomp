@@ -20,10 +20,26 @@ extern void sub_0019F5E0_gen(void);
 extern void sub_00367844_gen(void);
 extern void sub_003098A0_gen(void);
 extern void sub_00309700(void);
+extern void sub_003041E0_gen(void);
+extern int xbox_GetPresentInterval(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 
 #define GUEST32(va) (*(uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+
+/* The engine's swap path explicitly waits for console vblank in menus, even
+ * when the PC presenter is configured for vsync off. Honour native unlocked
+ * presentation at this one call site. XMV's separate waits still use the
+ * original routine, as does the engine when native vsync is enabled. */
+void sub_003041E0(void)
+{
+    if (GUEST32(g_esp) == 0x001A95B8u && xbox_GetPresentInterval() == 0) {
+        g_eax = 0; /* STATUS_SUCCESS, as the completed wait would return. */
+        g_esp += 4;
+        return;
+    }
+    sub_003041E0_gen();
+}
 
 /* XDK 4928's idle-voice notifier looks up the owner at DirectSound +0x328.
  * The asynchronous APU can report a voice after its owner was released; the

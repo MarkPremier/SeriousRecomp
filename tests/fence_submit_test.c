@@ -46,6 +46,8 @@ void sub_002B7552(void) { abort(); }
 void sub_002B78DF(void) { abort(); }
 void sub_0019D290(void) { abort(); }
 void sub_00367844_gen(void) { abort(); }
+void sub_003041E0_gen(void) { abort(); }
+int xbox_GetPresentInterval(void) { return 0; }
 
 static void run(uint32_t requested, uint32_t completed, uint32_t flags,
                 int pending, unsigned expected_submissions)

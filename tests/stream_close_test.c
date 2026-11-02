@@ -43,6 +43,8 @@ void sub_0019F5E0_gen(void)
     g_esp += 4;
 }
 void sub_001A6FF0_gen(void) { abort(); }
+void sub_003041E0_gen(void) { abort(); }
+int xbox_GetPresentInterval(void) { return 0; }
 void sub_0019F1E0_gen(void) { abort(); }
 void sub_0019D980(void) { abort(); }
 void sub_002B7552(void) { abort(); }
