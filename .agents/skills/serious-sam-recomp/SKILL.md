@@ -16,6 +16,20 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-02)
 
+- **Shader cache:** Sam already inherited Turok's persistent DXBC cache and
+  background guest-shader compilation, enabled by default. Native helper shaders
+  for presentation, scaling, partial clears and MSAA depth resolves now use it
+  too (nine formerly direct compile calls). The log names the active directory;
+  diagnostic GPU reports count actual source compiler calls. The new two-process
+  graphics regression compiles 12 programs cold and loads 12 with zero source
+  compiles on restart in an isolated test cache. Default cache directory is
+  `%LOCALAPPDATA%\xboxrecomp\shadercache`; never clear that shared directory for
+  tests. Use `RECOMP_SHADER_CACHE=<private folder>` or `0`. Cold unseen guest
+  variants still use the existing background-compilation path.
+  Toolkit commit `9cbe1ef`; an actual normal-executable warm restart also logged
+  23 disk hits with zero source compiles. Final exe SHA-256 starts `7C89E63C`;
+  the performance-only preceding build starts `55A6DEDA`. See bring-up notes
+  for full hashes, private cache evidence and backups.
 - **Slow-area performance (2026-11-03 evening):** toolkit `92bb1fb` preserves
   scene-depth ownership through colour-masked queries/depth prepasses, avoiding
   alternating 3×/1× depth aliases and full RGB565 readbacks. ZPASS reports are

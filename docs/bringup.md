@@ -978,7 +978,7 @@ The installed exe and matching map are under `build/Release`; SHA-256
 The previous executable is `analysis/serious_sam_before_async_perf.exe`.
 CMake's temporary output override is removed. The user-controlled after-test
 window uses `analysis/perf_user_after/saves`, not their original profile.
-No Turok worktree or shared shader cache was modified.
+No Turok worktree was modified and no shared shader cache was cleared.
 
 Evidence: `analysis/perf_user_control/measurement.json`, `stacks_gpu.txt`,
 `stacks_game.txt`, `summary_gpu.txt`, `summary_game.txt`;
@@ -987,3 +987,51 @@ Evidence: `analysis/perf_user_control/measurement.json`, `stacks_gpu.txt`,
 `analysis/build_perf_final.txt`, `build_zpass_scene_owner_test.txt`, and
 `build_report_async_test.txt`. Baseline raw stacks require the prior map at
 `analysis/effects_final_build/serious_sam_recomp.map`.
+
+## Persistent helper-shader caching (2026-11-03 evening)
+
+At the user's request, Turok's shader-cache implementation and README were read
+without modifying that worktree. Sam already has the same default-on persistent
+cache and background guest-shader compilation. Its cache key includes shader
+source, defines, entry point, profile and compile flags. Writes use temporary
+files and atomic replacement. The default directory is
+`%LOCALAPPDATA%\xboxrecomp\shadercache`; `RECOMP_SHADER_CACHE=0` disables it.
+
+Nine native helper compile calls still bypassed persistence: scale blit (three),
+MSAA depth resolve (two), presentation (two), and partial rectangle clears (two).
+They now use the existing cache with the same source, entry points and flags.
+No changes to shader mathematics or rendered quality are involved. Startup logs
+identify the cache directory, and GPU reports now distinguish actual source
+compiler calls from bytecode hits/background shader installation.
+
+The extended native graphics fixture exercises clears, scaled targets and MSAA
+depth publication as well as real visibility queries. A cold/warm regression
+runs it in two separate processes using a newly generated private directory:
+**12 source compiles / 0 disk hits cold; 0 source compiles / 12 disk hits warm**.
+Both tests pass. Normal query tests disable persistence; the restart regression
+does not touch the user's shared cache. This confirms repeated source compilation
+is avoided for the exercised paths, not that all game stutter is shader-related
+or that never-before-seen materials need no initial compilation. The preceding
+slow-view 37.2-to-142.9 fps comparison predates this cache extension.
+
+Evidence: `analysis/build_shader_cache_tests.txt` and
+`build/nv2a_zpass/Testing/Temporary/LastTest.log`. Normal-executable verification
+and final installation details follow below.
+
+Toolkit `9cbe1ef` contains this extension. Normal game verification uses a
+fresh private cache (`analysis/shader_cache_game_private`) and isolated saves:
+the first run compiled 24 programs as boot progressed into the menu, then a
+restart of the installed normal executable logged **23 disk hits, zero source
+compiles**, with no generic-shader fallback draws or skipped vertex draws.
+The cold run uses `analysis/shader_cache_game_cold`; the restarted normal launch
+uses `analysis/shader_cache_game_warm`. Both are diagnostic runs with periodic
+GPU reports; their FPS values are not performance benchmarks. The user-controlled
+comparison window was already closed before these short boot probes.
+
+The final executable and map are installed in `build/Release`. Exe SHA-256:
+`7C89E63C609CDC844E34C6E3355C6103A04F292B953514CA46CA29FB04C25828`.
+The previous performance-only executable is
+`analysis/serious_sam_before_shader_cache.exe`, with its map retained under
+`analysis/perf_final_build`. The temporary CMake output override is removed.
+The two owned boot probes were closed, original saves remain untouched, and
+normal launches use the default shared cache without additional setup.

@@ -76,6 +76,11 @@ your own disc image, and the C code is generated from it on your machine.
   reports complete asynchronously with ordered fences. The loading/video
   presenter also honours native vsync-off. See [bring-up notes](docs/bringup.md)
   for the short live comparison and its limits.
+- Shader bytecode persists across launches, including presentation, scaling,
+  rectangle-clear and depth-resolve helpers. A two-process cold/warm graphics
+  test compiles 12 shaders initially, then reloads all 12 with zero source
+  compiles. This reduces repeat compilation stalls; steady scene frame rate
+  still depends on the scene's work.
 
 ## What you need
 
@@ -182,6 +187,13 @@ initialization and does not verify working sound.
 The original XBE is loaded from the selected game folder. Use
 `RECOMP_FPS_LOG=5` for periodic performance logging.
 `RECOMP_CPU_RGB565=1` restores the slower CPU colour fallback for diagnosis.
+Shader caching and background guest-shader compilation are enabled by default,
+as in Turok. The disk cache is `%LOCALAPPDATA%\xboxrecomp\shadercache`;
+`RECOMP_SHADER_CACHE=<folder>` selects another directory (`0` disables it).
+`RECOMP_SHADER_ASYNC=0` selects synchronous compilation for diagnosis.
+The log records the cache directory; GPU diagnostic reports distinguish disk
+hits from actual source compiler calls. New uncached shaders compile on first
+encounter, and changed shader sources automatically get new cache keys.
 `RECOMP_RENDER_SCALE=1` selects original resolution; the runtime otherwise uses
 automatic scaling. Lowering it gave little menu-speed improvement in this test.
 `RECOMP_VIDEO_FPS_CAP` defaults to `200` for full-screen packed-YUV movies;
