@@ -1266,3 +1266,26 @@ Installed exe SHA-256:
 The lightmap correction remains included. Aspect ratios with 21:9 gameplay and
 original 4:3 cutscenes, the DirectSound crash, and the remaining thin streaks
 remain open. No Turok tree or original save was modified.
+
+## 2026-11-04: follow-up scope and code audit
+
+The lighting correction is shared engine code, not a Hatshepsut patch. The
+rotations in the current generated image were cross-checked against the original
+Xbox instructions. Among the inspected rotate-to-carry-consumer sequences,
+the three affected `rol dl,1 / adc esi,0` loops are the directional mixer and
+two masked point-light mixers (`294650`, `294190`, `294440`). All are corrected
+by the installed build. Visual verification remains first-level only; do not
+claim every level or every kind of lighting has been validated.
+
+No further runtime change was made in this follow-up audit. The open DirectSound
+cleanup crash is distinct evidence from the historical firing/allocator crash;
+no common cause has been established. Thin dark streaks, the intermittent boot
+fence stall, and nine unsupported catch continuations remain open. The ten
+unresolved generated stubs should not be reported as ten confirmed missing game
+features: several target misdecoded bytes or unreachable code after a catch
+handler's return. For example, `199950` exists as a label in its real parent,
+and catch continuation `199A75` is already covered there; its duplicate helper's
+unreachable tail reference alone is not evidence of a broken runtime path.
+The `8B334` continuation, unlike that example, has no emitted label and warrants
+further exception-CFG coverage work. Do not blindly seed the ten stubs as new
+function starts, since legitimate continuation code inherits its parent's frame.
