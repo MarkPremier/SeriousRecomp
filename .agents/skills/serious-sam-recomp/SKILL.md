@@ -16,6 +16,21 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-03)
 
+- **Lightmaps (2026-11-04):** toolkit `ef79bcf` makes ROL/ROR update CF when
+  consumed. The directional and two point-light shadow-mask loops use
+  `rol dl,1 / adc esi,0`; stale CF repeated the first mask byte. Regenerated
+  chunks 40/49/54/139 from a complete private generation; no title data/code
+  committed. New seventh test extracts the actual generated `0x294650` mixer:
+  old code has 197 wrong samples, fixed code passes all 456 plus row guards
+  and guest ABI checks. Ramp before/after captures and restored palm-mask
+  images are under `analysis/lightmap_mask_before` and `_after`. Thin dark
+  streaks remain in some views and are not claimed fixed. Installed exe
+  SHA-256 `93BFFDE07847890095C39894E7E7B6AA164D29ED9E396E5A3466275FACC255C7`.
+  Toolkit `ed46eda` adds UV/matrix/texgen information to F11 captures only.
+  Seven title tests pass; carry/rotate suite has 39 passes, 4 compiler-dependent
+  skips, 29 subtests. User Xbox references show the expected sunlit courtyard,
+  palm and fence shadows. Turok worktrees remain untouched.
+
 - **PC Settings:** separate native **Options > PC Settings** in both menu
   contexts. Resolution, fullscreen, VSync, frame limit, AF and MSAA apply live
   and persist under `[pc_settings]` in the exe INI. Override

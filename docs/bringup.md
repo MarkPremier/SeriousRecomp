@@ -1174,3 +1174,60 @@ benchmark. Input toolkit commit: `6c24bc2`; live-cap toolkit commit: `0c20d5f`.
 The fresh process in `analysis/pc_settings_restart` loads every saved value;
 its backend logs MSAA 1×→4× and scale 3×→1×. Native state reads fullscreen=1
 and frame_limit=60 after restart. All owned test processes were then closed.
+
+## 2026-11-04: lightmap shadow masks repeat their first byte
+
+The user's Xbox reference photographs show a sunlit courtyard after the storm,
+with palm and fence shadows and no extra dark bands. Fresh isolated archive-only
+runs reproduced the dark ramp. Disabling `RECOMP_TEX_VALIDATE_ONCE` made no visible
+difference. F11 captures now also report each stage's first UV, texgen and matrix
+enable state (toolkit `ed46eda`), to distinguish source images from sampling errors.
+
+The actual Xbox directional-light mixer at `0x00294650` and masked point-light
+mixers at `0x00294190` / `0x00294440` rotate an 8-bit mask then use its carry to
+advance the source pointer: `rol dl,1; adc esi,0`. The lifter emitted a correct
+8-bit rotation but never assigned its carry-out. The pointer stayed on the first
+byte, repeating that byte across the shadowmap. This accounts for missing shadow
+patterns and polygons receiving only ambient light despite being in sunlight.
+Toolkit `ef79bcf` emits carry-out from the rotated result, preserves CF for a zero
+masked count and captures CL before writing the destination. ZF/SF/PF stay intact.
+No Croteam source code was copied or adapted; the correction follows the Xbox
+instructions and the existing lifter.
+
+Verification:
+
+- `tests/lightmap_mask_test.c` executes the actual generated `0x294650` body,
+  extracted at test configure time. Nonrepeating masks cross byte boundaries,
+  start at all eight bit positions and cover padded rows. Old generated code:
+  **197 failures**. Regenerated code: **456 samples pass**, padding and callee-save
+  registers/stack pass. No generated game code is checked in.
+- Seven title CTests pass. Toolkit rotate/carry/shift suite: 39 pass, 4 skip
+  because its optional clang/gcc compiler is unavailable; 29 subtests pass.
+- Full temporary generation: 35,103 functions, zero failures, 10 unresolved
+  stubs. Only chunks 40/49/54/139 changed in executable code; other differences
+  were the already-known menu-render wrapper declaration/comment. Installed
+  only the affected chunks, preserving unchanged generated-file mtimes.
+- Isolated runtime BMP captures: `analysis/lightmap_mask_before/frame.bmp`
+  has a dark ramp; `analysis/lightmap_mask_after/frame.bmp` initially captured
+  the same view sunlit (later overwritten by the test's game-over capture).
+  `analysis/lightmap_mask_after/ramp.bmp` and `courtyard.bmp` preserve bright
+  ramp/courtyard views. `lightmaps.png` shows restored palm patterns in source
+  lightmaps. These are runtime framebuffer captures, not OS window screenshots.
+  Thin dark streaks remain visible in some ramp views; do not claim those fixed.
+- Saves are private sparse copies of `analysis/perf_save_snapshot`; game data
+  is `test_clean`. Tests disabled PC mouse input so physical mouse motion did
+  not steer the test camera. Controller scripts used the original input path.
+  The first 80s Start dismisses NETRICSA, 85s Start pauses; B resumes. Do not
+  send movement into that pause menu. Test gameplay eventually reached game
+  over from enemy attacks; this was not a crash.
+- Release exe SHA-256:
+  `93BFFDE07847890095C39894E7E7B6AA164D29ED9E396E5A3466275FACC255C7`.
+
+Other pending work remains: Quit Game, selectable gameplay aspect ratios with
+original 4:3 cutscenes, and crash investigation. A separate earlier isolated run
+`analysis/aspect_baseline` crashed during DirectSound cleanup at 22:12:16, with
+`eax=FE0001B4`, guest return `003677B3`, native RIP `141CCC1B0`. This is preserved
+alongside its exact pre-fix executable/map under `analysis/lightmap_baseline`.
+The later coordinates probe ended at its 600-second watchdog, not that crash.
+No DirectSound workaround has been added for this new crash and no general
+stability claim is made. Turok projects/toolkits and original saves are untouched.

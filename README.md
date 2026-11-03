@@ -10,6 +10,14 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- Lightmap correction (2026-11-04): rotate instructions now publish their carry
+  flag, allowing Sam's shadow-mask mixers to advance between bytes. The prior
+  code repeated the first mask byte, losing patterned shadows and leaving
+  sunlit surfaces dark. A native test of the actual generated mixer fails with
+  197 wrong samples before the fix and passes all 456 after it. Isolated gameplay
+  captures show the ramp brightening and patterned palm shadows returning.
+  Thin streaks still visible in some views remain under investigation.
+
 - Bring-up started on 2026-11-01. XBE metadata verified: USA title
   `0x54540004`, XDK 4928, entry point `0x0003D755`.
 - Separate runtime worktree: `../xboxrecomp_ss`, branch `serious-sam`, based on

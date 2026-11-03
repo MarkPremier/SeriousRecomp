@@ -24,3 +24,12 @@ add_test(NAME menu_present COMMAND menu_present_test)
 add_test(NAME pc_controls COMMAND pc_controls_test)
 add_executable(pc_settings_test pc_settings_test.c)
 add_test(NAME pc_settings COMMAND pc_settings_test)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(SAM_GEN "${CMAKE_CURRENT_LIST_DIR}/../src/recomp/gen")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/extract_lightmap_mask.py"
+    "${SAM_GEN}/recomp_0054.c" "${CMAKE_CURRENT_BINARY_DIR}/sam_lightmap_mask.inc"
+    COMMAND_ERROR_IS_FATAL ANY)
+add_executable(lightmap_mask_test lightmap_mask_test.c)
+target_include_directories(lightmap_mask_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINARY_DIR}")
+add_test(NAME lightmap_mask COMMAND lightmap_mask_test)
