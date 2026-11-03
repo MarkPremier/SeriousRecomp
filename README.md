@@ -70,6 +70,12 @@ your own disc image, and the C code is generated from it on your machine.
   reports use actual passing pixels instead of always reporting full visibility,
   addressing light halos through walls. Mathematical and GPU regressions pass;
   user gameplay verification of these two effects is pending.
+- Slow-area optimization: a user-positioned Hatshepsut view improved from
+  **37.2 to 142.9 fps** at the existing automatic 3× scale. Scene depth now stays
+  scaled through colour-masked queries and model depth passes, and visibility
+  reports complete asynchronously with ordered fences. The loading/video
+  presenter also honours native vsync-off. See [bring-up notes](docs/bringup.md)
+  for the short live comparison and its limits.
 
 ## What you need
 

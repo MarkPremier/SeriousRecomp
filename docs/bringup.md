@@ -910,3 +910,80 @@ CMake's temporary output-directory override was removed. The existing 200 fps
 video default and unlocked menu/gameplay policies remain in place. No new
 logging-only gameplay performance comparison was made for real occlusion yet;
 query completion now waits for GPU results and its cost needs measurement.
+
+## Slow-area readback and visibility stalls (2026-11-03 evening)
+
+The user reported loading-screen presentation around 23 fps and a Hatshepsut
+combat view dropping to 34–45 fps. A read-only save snapshot was taken while
+the game was closed (`analysis/perf_save_snapshot`), retaining sparse files with
+Robocopy `/SPARSE:Y`. Before/after instances use separate copies and the user
+positioned the camera in the slow view with their Xbox controller. No scripted
+input or test instance wrote to the original save folder.
+
+Logging-only measurements, with no framebuffer captures or renderer timing:
+
+| View | Mean fps | Five-second period range |
+|---|---:|---:|
+| Before, user-positioned slow view | 37.2 | 33.6–40.8 |
+| After, same area/view | 142.9 | 140.2–145.5 |
+
+Each measurement lasts 15 seconds and discards the first partial period,
+leaving two complete five-second periods. This is a short live comparison,
+not a deterministic replay; actors and animation continue. The user independently
+reported about 140 fps in this view and about 300 elsewhere after the update.
+Do not generalize that result to every level or heavy combat situation.
+
+Before sampling, native unwound stacks were captured separately from FPS
+measurement. The GPU executor had 56/80 samples under full synchronization,
+including 38 publishing RGB565 pixels to CPU RAM, plus 11 in synchronous ZPASS
+reads. The title had 36/80 samples in D3D fence waits. A read-only native target
+cache inspection showed two views of the same 640×480 depth allocation: one
+1920×1440 and one 640×480. Colour-masked visibility/model depth passes were
+being classified as new unscaled shadow targets. Switching back to colour
+created a conflicting alias, forcing publication of the whole dirty frame.
+
+Toolkit `92bb1fb` records actual scene-depth ownership and reuses its scale in
+later depth prepasses/queries. Separate true depth-only shadow targets remain
+unscaled. ZPASS reports now queue immutable counter snapshots and complete
+through nonblocking polling even if PUT stops. Counter resets cannot recycle
+queries still owned by pending reports. Reports complete in submission order;
+fence mirrors/events cannot retire past their pending memory writes, and GPU
+semaphore releases drain reports before publishing their release values.
+
+After profiling, no full-frame publication/layout sync path appeared in 80
+executor samples; it waited for work in 33 samples. The title's fence-wait
+samples dropped to 2/80. A native cache inspection showed one scaled depth
+owner. Geometry/model work now dominates the title thread; the audio thread
+also spends substantial time scanning contiguous allocations. These are the
+next profiling targets, not changes already included here.
+
+Loading/NETRICSA sampling found 76/100 title samples in the presenter's explicit
+BlockUntilVerticalBlank at return `0x001DA528`. The wrapper now follows the
+native presentation interval at that site as well as the engine swap site.
+Enabled vsync and the other two direct wait sites retain their old semantics.
+Decoder/audio timing is unchanged. The updated run logs about 64 fps in the
+pre-gameplay loading/message stage. This is presentation throughput, not the
+decoded movie frame rate or a measurement of total asset-loading time.
+
+Validation: the native ZPASS regression checks hidden/visible pixels, scaled
+scene-depth reuse both with and without query counting, a separate native-size
+shadow target, pending snapshots across resets, FIFO empty reports and drain.
+Both CPU/GPU clear-report regressions pass; the GPU case verifies asynchronous
+real NV097 report dispatch completes after polling with submission stopped.
+All four title wrapper tests pass, including the loading presenter, retained
+wait sites, enabled native vsync and guest register/stack preservation.
+
+The installed exe and matching map are under `build/Release`; SHA-256
+`55A6DEDAEC0815F69DBBC890C69A1382C5AD5A1570EB95BB2F8EBA5C88DA7C5C`.
+The previous executable is `analysis/serious_sam_before_async_perf.exe`.
+CMake's temporary output override is removed. The user-controlled after-test
+window uses `analysis/perf_user_after/saves`, not their original profile.
+No Turok worktree or shared shader cache was modified.
+
+Evidence: `analysis/perf_user_control/measurement.json`, `stacks_gpu.txt`,
+`stacks_game.txt`, `summary_gpu.txt`, `summary_game.txt`;
+`analysis/perf_user_after/measurement.json` and `stacks_*.txt`/`summary_*.txt`;
+`analysis/perf_slow_visual` (loading-stage diagnostic only);
+`analysis/build_perf_final.txt`, `build_zpass_scene_owner_test.txt`, and
+`build_report_async_test.txt`. Baseline raw stacks require the prior map at
+`analysis/effects_final_build/serious_sam_recomp.map`.

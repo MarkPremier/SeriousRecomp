@@ -27,13 +27,14 @@ extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 
 #define GUEST32(va) (*(uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 
-/* The engine's swap path explicitly waits for console vblank in menus, even
- * when the PC presenter is configured for vsync off. Honour native unlocked
- * presentation at this one call site. XMV's separate waits still use the
- * original routine, as does the engine when native vsync is enabled. */
+/* Honour native unlocked presentation for the engine swap and the video /
+ * loading-screen presenter. Decoder timing remains driven by its own clock,
+ * and full-screen video has a separate presentation cap. Other waits and
+ * enabled native vsync retain the original routine. */
 void sub_003041E0(void)
 {
-    if (GUEST32(g_esp) == 0x001A95B8u && xbox_GetPresentInterval() == 0) {
+    uint32_t caller = GUEST32(g_esp);
+    if ((caller == 0x001A95B8u || caller == 0x001DA528u) && xbox_GetPresentInterval() == 0) {
         g_eax = 0; /* STATUS_SUCCESS, as the completed wait would return. */
         g_esp += 4;
         return;

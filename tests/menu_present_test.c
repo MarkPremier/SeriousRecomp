@@ -35,8 +35,10 @@ int main(void){
  g_xbox_mem_offset=(ptrdiff_t)calloc(1,0x2000);CHECK(g_xbox_mem_offset);
  run(0x001A95B8,0,0); /* Native vsync off: engine menu swap is unlocked. */
  for(int i=1;i<=4;++i)run(0x001A95B8,i,1);
- const uint32_t movies[]={0x001D9C86,0x001DA528,0x0031080D};
- for(unsigned i=0;i<3;++i){run(movies[i],0,1);run(movies[i],1,1);}
+ run(0x001DA528,0,0); /* Loading/video presenter follows native vsync too. */
+ for(int i=1;i<=4;++i)run(0x001DA528,i,1);
+ const uint32_t movies[]={0x001D9C86,0x0031080D};
+ for(unsigned i=0;i<2;++i){run(movies[i],0,1);run(movies[i],1,1);}
  run(0x12345678,0,1); /* Unknown callers retain the original semantics. */
  free((void *)g_xbox_mem_offset);puts("menu presentation, movie waits and guest ABI checks passed");return 0;
 }

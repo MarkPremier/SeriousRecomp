@@ -16,6 +16,18 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-02)
 
+- **Slow-area performance (2026-11-03 evening):** toolkit `92bb1fb` preserves
+  scene-depth ownership through colour-masked queries/depth prepasses, avoiding
+  alternating 3×/1× depth aliases and full RGB565 readbacks. ZPASS reports are
+  asynchronous, retain snapshots through resets, and gate fence/event retirement
+  until their writes complete; semaphore releases drain pending reports. The
+  loading/video presenter at caller `0x001DA528` now honours vsync-off as does
+  the engine swap. Decoder clocks and the 200 fps video cap remain. With the
+  user positioning the camera, short logging-only samples improved 37.2 to
+  142.9 fps in the slow view (user reports ~300 elsewhere). This is not a
+  whole-game or deterministic benchmark. Original saves are untouched; testing
+  uses sparse copies under `analysis/perf_*`. Runtime and four wrapper tests
+  pass. See the latest bring-up section for evidence and installed exe hash.
 - **Effect corrections (2026-11-03):** x87 `fld m80` was emitted as `MEMF`,
   reading only four of the ten bytes in the CRT asin endpoint's pi/2 constant.
   The actual generated ground-normal function returned near-zero pitch for
