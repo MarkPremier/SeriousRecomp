@@ -38,6 +38,11 @@ your own disc image, and the C code is generated from it on your machine.
 - Xbox/XInput controller discovery and the guest USB bus are enabled. D-pad,
   left-stick menu movement, A select, B back, and first-level movement are
   verified through USB input reports. The connected Xbox controller is detected.
+- Keyboard/mouse controls are enabled by default. **Options > PC Controls** is
+  available from the main menu and the gameplay pause menu, with rebinding,
+  mouse speed, invert Y and remembered settings. Xbox input remains available.
+- **Options > PC Settings** controls render resolution, fullscreen, VSync,
+  frame limit, anisotropic filtering and MSAA, with live changes and saved choices.
 - Fixed buffered stream writes and update opens so settings and signed profiles
   persist. The first Hatshepsut level now loads with its HUD and weapon.
 - Release configuration checks that C optimization flags are present.
@@ -205,6 +210,63 @@ Release builds emit a linker map with a fixed image base for crash symbolization
 ```powershell
 .\.venv\Scripts\python.exe ..\xboxrecomp_ss\tools\symbolize.py build\Release\serious_sam_recomp.map <RIP>
 ```
+
+## PC controls
+
+Open **Options > PC Controls** from the main menu or the gameplay pause menu.
+Use the arrows or controller to select a row, then Enter/A to bind a key, mouse
+button or wheel direction. A duplicate binding swaps with its previous action;
+Delete or right-click clears a binding. Escape/B cancels or returns. The page
+scrolls with the selection or mouse wheel; its rows and Back button accept clicks.
+Mouse speed (1–10), invert Y and Restore defaults are on the same page.
+
+| Action | Default |
+|---|---|
+| Move | WASD |
+| Look | Mouse |
+| Fire | Left mouse |
+| Use / sniper zoom | Right mouse |
+| Jump / swim up | Space |
+| Crouch / swim down | Ctrl |
+| NETRICSA | Tab |
+| Next / previous weapon | Wheel up / down |
+| Reload | R |
+| Favourite weapon 1 / 2 | 1 / 2 |
+| Third-person view | H |
+| Pause / Start | Escape |
+
+Menus always keep arrows/WASD, Enter/Space to select and Escape/Backspace to
+return, independently of gameplay bindings. Escape also supplies Start at the
+loading screen's “press START” prompt. Click the game window to capture the
+mouse for looking; Alt+Escape releases it. Opening a menu releases it too.
+
+Settings are saved under `[pc_controls]` in `serious_sam_settings.ini` beside the
+executable. They do not change the console player's controls or disc archives.
+Raw mouse counts enter Sam's normal action builder, independently of frame time
+and console sensitivity/invert. `RECOMP_KBM=0` disables PC gameplay input.
+Tests can set `RECOMP_PC_CONTROLS_FILE=<private ini>` to isolate preferences.
+
+## PC settings
+
+**Options > PC Settings** is available from both the main and pause menus.
+Left/right, Enter/A or a mouse click changes a value. Changes apply immediately
+and are saved in `[pc_settings]` in `serious_sam_settings.ini` beside the exe.
+
+| Setting | Choices |
+|---|---|
+| Render resolution | Auto, 640×480, 1280×960, 1920×1440, 2560×1920, 2880×2160 |
+| Display | Windowed, borderless fullscreen; Alt+Enter also updates the page |
+| VSync | Off, On |
+| Frame limit | Unlimited, 30, 60, 120, 144, 200, 240, VBlank |
+| Anisotropic filtering | Game default, 2×, 4×, 8×, 16× |
+| Anti-aliasing | Off, 2×, 4×, 8× MSAA |
+
+Defaults retain automatic resolution, windowed display, VSync off and unlimited
+gameplay, with 16× AF and MSAA off. The separate 200 fps movie limit remains.
+Resolution sets internal rendering size; the view keeps its original 4:3 shape.
+Explicit `RECOMP_RENDER_SCALE`, `RECOMP_VSYNC` and `RECOMP_FPS_CAP` overrides win
+at launch and appear on the page. `RECOMP_PC_SETTINGS_FILE` selects a private
+graphics INI for tests; otherwise the controls INI path is shared.
 
 ## Reference
 

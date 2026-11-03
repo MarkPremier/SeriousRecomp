@@ -1035,3 +1035,142 @@ The previous performance-only executable is
 `analysis/perf_final_build`. The temporary CMake output override is removed.
 The two owned boot probes were closed, original saves remain untouched, and
 normal launches use the default shared cache without additional setup.
+## Keyboard/mouse controls and the PC Controls page (2026-11-03)
+
+Sam now has its own **Options > PC Controls** page in the front end and gameplay
+pause menu. It uses the title's native text-button widgets, focus rendering and
+menu transitions. The nineteen scrolling rows cover sixteen bindings, mouse
+speed, invert Y and restoring defaults. Keyboard/controller navigation, key and
+mouse capture, wheel bindings, duplicate-key swapping, clearing a binding and a
+clickable Back button are implemented. Choices live in `[pc_controls]` in the
+executable's existing `serious_sam_settings.ini`; `RECOMP_PC_CONTROLS_FILE` gives
+tests a private INI. No menu archives, console profiles or original saves change.
+
+Input is deliberately Sam-specific. Its default Xbox jump/weapon buttons differ
+from Turok's, so copying Turok's pad bindings would be incorrect. Keyboard actions
+enter Sam's control globals immediately before the original action builder
+`0x00070810` consumes them, for local player zero only. Movement merges at full
+deflection rather than adding speed to a held pad stick. Button globals are
+restored afterward, preventing a released keyboard button from sticking and
+preserving a simultaneously held controller button. The controller's chosen
+layout still works independently.
+
+Raw mouse counts enter `ctl_fTurnRight` / `ctl_fTurnUp` as angles. The wrapper
+compensates the profile sensitivity and invert multipliers which the original
+builder then applies, giving the PC page independent settings without modifying
+that profile. Default speed 5 is 0.1 degree/count; each speed step multiplies it
+by 1.4. Neither frame time nor the maximum stick turn rate scales the counts.
+The shared runtime's old direct-camera path is disabled: it contains another
+title's camera addresses. `RECOMP_KBM=0` opts out of Sam's PC gameplay input.
+
+Integration details:
+
+- `0x00030710` builds the Options entry; `0x00030D00` reconnects its focus links
+  after the original Options layout selects its visible rows.
+- The extra menu is allocated once with the runtime guest heap, constructed by
+  the original base-menu constructor and populated with cloned text buttons.
+  Dispatch tokens `0x00030CF7/8` identify the native Open/Key callbacks, using
+  unused alignment padding after the original Options initializer. No guest
+  executable bytes change. Three additional `_gen` wrappers are reproducible
+  with `tools/generate.ps1 -RecompOnly` (35,103 translated, zero failures, ten
+  existing unresolved stubs; ten wrapped functions total).
+- PC input/menu mode follows both presentation callers `0x001A95B8` and
+  `0x001DA528`, the action builder, and menu renderer `0x0002B6BE`. Paused
+  rendering can bypass the presentation waits, so the renderer hook is required.
+  Fixed PC menu keys call the game's `0x0002B588` key-event handler on the render
+  thread, with directional repeat and held-key suppression across transitions.
+  The PC Pause binding pulses normal Xbox Start; it does not rely on holding a
+  short keyboard tap until a USB report arrives. Xbox input keeps its original
+  USB path. Escape now supplies Start at the loading prompt,
+  then Pause in play and Back in menus. Held inputs and mouse deltas are discarded
+  on a context change until release, so choosing a menu item cannot fire/jump.
+- The only toolkit addition is `xbox_KbmInputDown`, exposing the existing binding
+  reader, including mouse suppression and wheel latching. All title/menu code is
+  in this repo. **No Turok project or Turok toolkit worktree was modified.**
+
+Verification uses copied sparse save images under `analysis/kbm_*`, the untouched
+disc archives, private control INIs and the existing diagnostic input/framebuffer
+APIs. Five committed native tests pass. The new test covers input opt-out,
+menu/player isolation, release, sensitivity/invert compensation, equal total
+counts across polling rates, persistence (including numeric favourite keys),
+duplicate swaps, short mouse clicks, Delete, capture timeout, controller key ABI,
+and pointer hit tests in 4:3, wide and tall windows.
+
+`analysis/make_pc_action_probe.py` also extracts the actual generated
+`sub_00070810_gen` into a native harness with the constants read from the user's
+disc. It verifies the resulting movement/jump/fire action, release and guest
+stack/callee-saved registers. At all tested profile sensitivities (-127, 0, 127)
+and both console invert states, 100 horizontal / -50 vertical counts produce
+-10 / +5 degree action angles at PC speed 5. No independent replacement for the
+action builder was used in that check.
+
+Runtime captures show the page in both menu contexts, scrolling to mouse speed
+and defaults, a binding changed to H, speed changed to 6, and those preferences
+reloaded by a fresh process. Keyboard H then visibly moves Sam from the spawn
+platform up the Hatshepsut ramp; Escape pauses. Evidence includes
+`analysis/kbm_visual/game_before_move.bmp`, `game_keyboard_move.bmp`, and
+`analysis/kbm_final/controls_scrolled.bmp`. These are runtime framebuffer
+captures, not Windows window captures: Computer Use still fails to connect to
+its native pipe (error 2 after recovery). Physical mouse feel remains for the
+user to assess; raw-count/action and pointer event paths are covered by tests.
+The existing 200 fps video policy and native rendering optimizations are kept;
+this is not a new whole-game performance measurement or a claim about the two
+historical intermittent stalls/crashes.
+
+## PC Settings page (2026-11-03)
+
+The user's additional request adds a separate **Options > PC Settings** entry
+beside PC Controls. The original six Options rows are spaced to fit both new
+entries; focus links include all visible rows. Both added pages use native Sam
+text buttons and are accessible from the main and pause menus. Graphics choices
+cover render resolution (automatic or five fixed sizes including the
+native size), windowed/borderless fullscreen, VSync, a live frame limit,
+anisotropic filtering and 2×/4×/8× MSAA, plus Restore defaults.
+
+`src/pc_settings.c` owns these preferences in `[pc_settings]` of the same INI.
+They apply through the runtime's existing render-scale, anisotropy, MSAA,
+fullscreen and present-interval setters. A new `xbox_SetFrameLimit` /
+`xbox_GetFrameLimit` exposes the existing flip pacer for live changes, lazily
+creating its high-resolution waitable timer if a limit is enabled later. It
+retains the separate movie cap and the pacer's deadline-reset behavior. No
+`timeBeginPeriod` calls or Turok title-specific settings/patches were introduced.
+Startup environment overrides for resolution, VSync and the global cap win over
+saved values, including custom scale/rate values. Alt+Enter fullscreen changes
+are reflected and saved without undoing a pending asynchronous window request.
+
+Defaults are Auto rendering, windowed, VSync off, unlimited gameplay, 16× AF
+(as in Turok's settings) and MSAA off. The view remains 4:3: widescreen needs
+Sam-specific projection/culling work and is not implied by a resolution choice.
+Tests can override `RECOMP_PC_SETTINGS_FILE`; otherwise the controls INI override
+also isolates these preferences.
+
+The six title tests pass, including graphics values, live setter arguments,
+persistence, other INI sections, explicit/custom overrides, malformed preferences,
+defaults and fullscreen synchronization. The menu/presentation regression now
+checks the menu-render tick as well as both presentation callers. The actual
+generated-action harness still passes. A fresh full generation into
+`analysis/pc_gen_verify` translates all 35,103 functions with zero failures and
+ten wrapped functions; the installed menu-render function body matches that
+output (only the generated function's comment differs).
+
+The CPU clear/cap-API regression and pure video-pacing tests pass. The existing
+GPU clear/query fixture currently loses its hardware device during an occlusion
+readback (`0x887A0005`, device reason `0x887A0020`). A separately archived and built
+pre-settings runtime at `6c24bc2` reproduces the same failure, and an isolated cold
+shader cache does too; it is not introduced by the new frame-limit API. This
+fixture failure is not marked fixed. Normal-game rendering is verified separately.
+
+Live verification of the installed build (`9558CFF7E93EA107FC21DCE59A6B9C46C26A7E3BB02409994C427AA1AC8A6D52`)
+uses `analysis/pc_settings_final`. From the paused first level, keyboard navigation
+opens both new entries. The graphics page switches Auto (3×) to 640×480; the
+backend logs two colour and one depth targets resized to 1×. It logs MSAA changing
+1×→2×→4×. AF is changed to 8× and fullscreen is enabled; the native window state
+reads fullscreen=1. The live cap reads 60 and successive logging periods report
+60.0 fps. Returning to Hatshepsut preserves the scene and HUD with these settings.
+`options_both_entries.bmp`, `pc_settings_default.bmp`, `pc_settings_changed.bmp`,
+`pc_settings_fullscreen.bmp` and `game_with_4x_msaa.bmp` preserve the framebuffer
+evidence. These are functional/pacing checks, not a new uncapped performance
+benchmark. Input toolkit commit: `6c24bc2`; live-cap toolkit commit: `0c20d5f`.
+The fresh process in `analysis/pc_settings_restart` loads every saved value;
+its backend logs MSAA 1×→4× and scale 3×→1×. Native state reads fullscreen=1
+and frame_limit=60 after restart. All owned test processes were then closed.

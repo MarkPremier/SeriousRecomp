@@ -11,6 +11,8 @@ volatile uint64_t g_icall_count;
 static int interval,waits;
 int xbox_GetPresentInterval(void){return interval;}
 void sub_003041E0(void);
+void sub_0002B6BE(void);
+extern unsigned pc_frame_calls,pc_menu_draw_calls;
 void sub_003041E0_gen(void){++waits;g_eax=0;g_esp+=4;}
 void sub_001A6FF0_gen(void){abort();}
 void sub_0019F1E0_gen(void){abort();}
@@ -24,12 +26,13 @@ void sub_00367844_gen(void){abort();}
 void sub_003098A0_gen(void){abort();}
 void sub_00309700(void){abort();}
 static void run(uint32_t caller,int sync,int expected){
- interval=sync;waits=0;g_esp=0x1000;WORD(g_esp)=caller;
+ interval=sync;waits=0;pc_frame_calls=0;g_esp=0x1000;WORD(g_esp)=caller;
  g_eax=99;g_ecx=2;g_edx=3;g_ebx=4;g_esi=5;g_edi=6;g_ebp=7;g_seh_ebp=8;
  sub_003041E0();
  CHECK(waits==expected && g_esp==0x1004 && g_eax==0);
  CHECK(g_ecx==2 && g_edx==3 && g_ebx==4 && g_esi==5 && g_edi==6 && g_ebp==7 && g_seh_ebp==8);
  CHECK(WORD(0x1000)==caller);
+ CHECK(pc_frame_calls==((caller==0x001A95B8 || caller==0x001DA528)?1u:0u));
 }
 int main(void){
  g_xbox_mem_offset=(ptrdiff_t)calloc(1,0x2000);CHECK(g_xbox_mem_offset);
@@ -40,5 +43,8 @@ int main(void){
  const uint32_t movies[]={0x001D9C86,0x0031080D};
  for(unsigned i=0;i<2;++i){run(movies[i],0,1);run(movies[i],1,1);}
  run(0x12345678,0,1); /* Unknown callers retain the original semantics. */
+ pc_frame_calls=pc_menu_draw_calls=0;g_esp=0x1000;
+ sub_0002B6BE(); /* Pause rendering need not enter a presentation wait. */
+ CHECK(pc_frame_calls==1 && pc_menu_draw_calls==1 && g_esp==0x1004);
  free((void *)g_xbox_mem_offset);puts("menu presentation, movie waits and guest ABI checks passed");return 0;
 }

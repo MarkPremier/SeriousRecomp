@@ -14,7 +14,36 @@ project is the reference for how the pipeline works and for the kinds of bugs to
 It is in active use by another agent, so **read it, but never modify it** (see
 "Do not touch").
 
-## Current state (2026-11-02)
+## Current state (2026-11-03)
+
+- **PC Settings:** separate native **Options > PC Settings** in both menu
+  contexts. Resolution, fullscreen, VSync, frame limit, AF and MSAA apply live
+  and persist under `[pc_settings]` in the exe INI. Override
+  `RECOMP_PC_SETTINGS_FILE` for tests (defaults to the controls INI path).
+  Default gameplay stays unlimited, the movie cap stays 200; default AF is 16×,
+  MSAA off. The view stays 4:3. The new runtime live-cap API uses the existing
+  pacer; rendering/window setters were already present. Six title tests pass.
+  The GPU clear/query fixture currently fails with device reason 0x887A0020;
+  an archived pre-settings `6c24bc2` runtime reproduces it. See bring-up notes.
+
+- **PC controls (2026-11-03):** keyboard/mouse defaults on. Native **Options >
+  PC Controls** exists in the main and pause menus, with sixteen bindings,
+  mouse speed/invert and defaults; `[pc_controls]` in the exe's settings INI
+  persists choices (`RECOMP_PC_CONTROLS_FILE` isolates tests). The Sam-only
+  wrappers are Options init `0x30710`, layout `0x30D00`, and action builder
+  `0x70810`. Keyboard actions enter its own control globals, independently of
+  console layouts, and button globals restore after building the action.
+  Mouse counts become angles, compensating the console profile's multipliers.
+  Keep `RECOMP_KBM_LOOK_DIRECT=0`: the toolkit's old direct-camera path has
+  another title's addresses. Context switching must follow **both** presenter
+  callers `0x1A95B8` and `0x1DA528` (the latter covers loading and pause menus),
+  plus the action builder and menu renderer `0x2B6BE`; paused rendering can
+  bypass both waits. PC menu keys call Sam's own key-event handler directly,
+  and the PC Pause binding pulses Xbox Start. Entry/key callbacks use dispatch
+  tokens `0x30CF7..A` in original padding. Six native tests and an actual generated-action fixture pass; runtime
+  captures verify menu integration, persistence and keyboard movement in
+  Hatshepsut. Physical mouse feel still needs user assessment. All work is in
+  Sam / `xboxrecomp_ss`; Turok worktrees are untouched. See bring-up notes.
 
 - **Shader cache:** Sam already inherited Turok's persistent DXBC cache and
   background guest-shader compilation, enabled by default. Native helper shaders

@@ -441,6 +441,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         _putenv_s("RECOMP_USB_PORT", "2");
     if (!getenv("RECOMP_XINPUT_SLOT"))
         _putenv_s("RECOMP_XINPUT_SLOT", "auto");
+    {
+        extern void pc_controls_load(void);
+        pc_controls_load();
+    }
     printf("Loading XBE...\n");
 
     /* Install VEH handler (first handler in chain) */

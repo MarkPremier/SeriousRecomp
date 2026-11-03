@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <xbox/xboxrecomp.h>
+#include "pc_controls.h"
 
 extern RECOMP_TLS uint32_t g_esp;
 extern ptrdiff_t g_xbox_mem_offset;
@@ -21,6 +22,10 @@ extern void sub_00367844_gen(void);
 extern void sub_003098A0_gen(void);
 extern void sub_00309700(void);
 extern void sub_003041E0_gen(void);
+extern void sub_00030710_gen(void);
+extern void sub_00030D00_gen(void);
+extern void sub_00070810_gen(void);
+extern void sub_0002B6BE_gen(void);
 extern int xbox_GetPresentInterval(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
@@ -34,12 +39,40 @@ extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
 void sub_003041E0(void)
 {
     uint32_t caller = GUEST32(g_esp);
+    if (caller == 0x001A95B8u || caller == 0x001DA528u) pc_controls_frame();
     if ((caller == 0x001A95B8u || caller == 0x001DA528u) && xbox_GetPresentInterval() == 0) {
         g_eax = 0; /* STATUS_SUCCESS, as the completed wait would return. */
         g_esp += 4;
         return;
     }
     sub_003041E0_gen();
+}
+
+void sub_00030710(void)
+{
+    sub_00030710_gen();
+    pc_controls_build_menu();
+}
+
+void sub_00030D00(void)
+{
+    sub_00030D00_gen();
+    pc_controls_options_layout();
+}
+
+void sub_00070810(void)
+{
+    int injected = pc_controls_input_begin(GUEST32(g_esp + 4));
+    sub_00070810_gen();
+    if (injected) pc_controls_input_end();
+}
+
+/* Paused gameplay can present without entering either vblank wait. Refresh
+ * menu input/capture at the menu renderer itself as well as the presenters. */
+void sub_0002B6BE(void)
+{
+    pc_controls_frame();
+    sub_0002B6BE_gen();
 }
 
 /* XDK 4928's idle-voice notifier looks up the owner at DirectSound +0x328.
@@ -211,8 +244,7 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
 
 
-    (void)xbox_va;
-    return (recomp_func_t)0;
+    return pc_controls_dispatch(xbox_va);
 }
 
 void recomp_icall_fail_log(uint32_t va)

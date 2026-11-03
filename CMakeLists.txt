@@ -61,6 +61,8 @@ set(GAME_SOURCES
     src/main.c
     src/recomp_manual.c
     src/game_files.c
+    src/pc_controls.c
+    src/pc_settings.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c
