@@ -51,6 +51,7 @@ your own disc image, and the C code is generated from it on your machine.
   mouse speed, invert Y and remembered settings. Xbox input remains available.
 - **Options > PC Settings** controls render resolution, fullscreen, VSync,
   frame limit, anisotropic filtering and MSAA, with live changes and saved choices.
+- The main menu includes **Quit Game**, with a confirmation that defaults to No.
 - Fixed buffered stream writes and update opens so settings and signed profiles
   persist. The first Hatshepsut level now loads with its HUD and weapon.
 - Release configuration checks that C optimization flags are present.

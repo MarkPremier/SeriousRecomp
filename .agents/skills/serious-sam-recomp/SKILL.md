@@ -16,6 +16,24 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-03)
 
+- **Quit menu (2026-11-04):** native main-menu Quit Game entry plus a Yes/No
+  page, default No, in `pc_controls.c`. Dispatch padding `0x30CFB..E` covers
+  open/key/yes/no callbacks. Custom entry must be hidden outside Main (the
+  original Main transition code only knows its five static gadgets). Header
+  sits below the shared logo. Keyboard/controller and pointer tests cover
+  cancel/confirm and an unmoved pointer preserving default No. Uses the
+  existing `xbox_HalReturnToFirmware(2)` desktop exit, as console dashboard
+  exits do. The original shell Quit (`0x36000`) set its flags and wrote
+  PersistentSymbolsX.ini but stalled in engine shutdown during the first UI
+  test; do not reinstate it as the desktop exit. Aspect ratio/widescreen and
+  the DirectSound crash remain pending; do not describe them as implemented.
+  Runtime captures in `analysis/quit_exit_test` verify the main entry, No
+  default, cancellation and confirmation; that process exited with code 0.
+  The final installed exe also exits through `HalReturnToFirmware(2)` with
+  scripted Xbox Up/A/B/Left/A after a normal game-file discovery launch
+  (`analysis/quit_controller_final`). All seven title tests pass. Final exe
+  SHA-256 `464FD307E595337A4242C9240ED290EA6A9246608FBE2114F1D226A7B0B6A95F`.
+
 - **Lightmaps (2026-11-04):** toolkit `ef79bcf` makes ROL/ROR update CF when
   consumed. The directional and two point-light shadow-mask loops use
   `rol dl,1 / adc esi,0`; stale CF repeated the first mask byte. Regenerated

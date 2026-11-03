@@ -1231,3 +1231,38 @@ alongside its exact pre-fix executable/map under `analysis/lightmap_baseline`.
 The later coordinates probe ended at its 600-second watchdog, not that crash.
 No DirectSound workaround has been added for this new crash and no general
 stability claim is made. Turok projects/toolkits and original saves are untouched.
+
+## 2026-11-04: main-menu Quit Game
+
+Added a sixth main-menu row and native Yes/No page. No is the default; Escape/B
+cancels, arrows switch and Enter/A confirms. Mouse hit boxes cover the two
+choices, not their gap, and a pointer that has not moved cannot replace default
+No. Callback addresses `0x30CFB..E` extend the existing unused-padding dispatch
+scheme without changing Xbox code bytes. The original Main transition routines
+know only their five static gadgets, so the extra Quit gadget is explicitly
+hidden outside Main. The confirmation header is below the shared logo.
+
+The first implementation called the game's unused shell Quit (`0x36000`). Its
+flags stopped the main loop and it wrote PersistentSymbolsX.ini, then stalled in
+engine shutdown. The final implementation instead requests the runtime's normal
+Xbox dashboard return (`xbox_HalReturnToFirmware(2)`), which exits to Windows as
+Turok's dashboard quit does. This is a main-menu action; it does not alter the
+pause menu's existing Exit action. PC settings already persist when changed.
+The initial stalled run is preserved in `analysis/quit_menu_test`; it was stopped
+only after the evidence was collected.
+
+Verification: extended PC controls tests cover No/Yes, Escape, Xbox A, guest
+stack/register preservation, pointer hover and the gap between buttons. All
+seven title CTests pass. Native captures under `analysis/quit_exit_test` show
+the row and confirmation without leftover main-menu text; cancellation returned
+to Main, and Yes exited with code 0. A final normal launch (private saves and
+settings, no GAME_DIR override) used `test_clean`, then Xbox-scripted Up/A/B/A/
+Left/A cancelled, reopened and quit. Its log ends `[EXIT] HalReturnToFirmware
+routine=2` (`analysis/quit_controller_final`). The final exe differs from the
+captured candidate only by the tested unmoved-pointer protection.
+
+Installed exe SHA-256:
+`464FD307E595337A4242C9240ED290EA6A9246608FBE2114F1D226A7B0B6A95F`.
+The lightmap correction remains included. Aspect ratios with 21:9 gameplay and
+original 4:3 cutscenes, the DirectSound crash, and the remaining thin streaks
+remain open. No Turok tree or original save was modified.

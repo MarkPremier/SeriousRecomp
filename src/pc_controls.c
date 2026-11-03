@@ -44,6 +44,11 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define PAGE_KEY  0x00030CF8u
 #define OPEN_SETTINGS 0x00030CF9u
 #define SETTINGS_KEY  0x00030CFAu
+#define OPEN_QUIT 0x00030CFBu
+#define QUIT_KEY 0x00030CFCu
+#define QUIT_YES 0x00030CFDu
+#define QUIT_NO 0x00030CFEu
+#define MAIN_MENU 0x0046F2A0u
 #define VISIBLE_ROWS 9
 #define BUTTON_SIZE 0xC8u
 #define TEXT_SIZE 128u
@@ -74,6 +79,11 @@ static char ini[MAX_PATH];
 static uint32_t page, entry, rows[ROW_COUNT], values[ROW_COUNT], title, help, status, back_button;
 static uint32_t settings_page,settings_entry,setting_rows[PC_SETTINGS_ROWS],setting_values[PC_SETTINGS_ROWS];
 static int selected_setting;
+static uint32_t quit_entry,quit_page,quit_choices[2];
+static int quit_selected;
+static void build_quit(void),quit_frame(void),open_quit(void),quit_key(void);
+static void quit_yes(void),quit_no(void);
+static void quit_desktop(void);
 static void update_settings_page(void),open_settings_page(void),settings_key(void),settings_frame(void);
 static int selected, scroll, capturing = -1, menu_mode = -1;
 static unsigned char previous[0x108], blocked[BIND_COUNT];
@@ -304,6 +314,7 @@ void pc_controls_build_menu(void)
     WORD(settings_entry+0xBC)=OPEN_SETTINGS;
     update_settings_page();
     update_page();apply();
+    build_quit();
     fprintf(stderr,"[PC CONTROLS] Options entry %08X, page %08X\n",entry,page);
 }
 
@@ -417,6 +428,10 @@ void (*pc_controls_dispatch(uint32_t address))(void)
     if(address==PAGE_KEY)return page_key;
     if(address==OPEN_SETTINGS)return open_settings_page;
     if(address==SETTINGS_KEY)return settings_key;
+    if(address==OPEN_QUIT)return open_quit;
+    if(address==QUIT_KEY)return quit_key;
+    if(address==QUIT_YES)return quit_yes;
+    if(address==QUIT_NO)return quit_no;
     return NULL;
 }
 
@@ -463,9 +478,15 @@ static void keyboard_frame(void)
 
 void pc_controls_frame(void)
 {
+    if(quit_entry)WORD(quit_entry+0x80)=WORD(ACTIVE_MENU)==MAIN_MENU;
+    if(quit_entry && WORD(ACTIVE_MENU)==MAIN_MENU) {
+        WORD(0x46F6E8+0xA0)=quit_entry;
+        WORD(0x46F3C8+0x9C)=quit_entry;
+    }
     follow_mode();
     keyboard_frame();
     pc_settings_poll();
+    if(quit_page && WORD(ACTIVE_MENU)==quit_page) {quit_frame();return;}
     if(settings_page && WORD(ACTIVE_MENU)==settings_page) {
         if(capturing>=0)cancel_capture();
         settings_frame();return;
@@ -514,6 +535,78 @@ void pc_controls_frame(void)
         if(wheel) {selected+=wheel>0?-1:1;if(selected<0)selected=0;if(selected>=ROW_COUNT)selected=ROW_COUNT-1;}
     }
     update_page();
+}
+
+static void update_quit(void)
+{
+    for(int i=0;i<2;++i)WORD(quit_choices[i]+0x7C)=i==quit_selected;
+    WORD(quit_page+0x14)=quit_choices[quit_selected];
+}
+
+static void build_quit(void)
+{
+    quit_page=alloc(0x40+0x2C+TEXT_SIZE);
+    if(!quit_page)return;
+    call(sub_0002F12B,quit_page,NULL,0);
+    memcpy(PTR(quit_page+0x40),PTR(0x3AA210),0x2C);
+    WORD(quit_page)=quit_page+0x40;WORD(quit_page+0x58)=QUIT_KEY;
+    WORD(quit_page+0x20)=quit_page+0x6C;
+    snprintf((char *)PTR(quit_page+0x6C),TEXT_SIZE,"Quit Game");
+    if(!button(quit_page,"QUIT GAME",90,115,0.85f) ||
+       !button(quit_page,"Return to the desktop?",125,190,0.7f))return;
+    quit_choices[0]=button(quit_page,"YES",200,265,0.7f);
+    quit_choices[1]=button(quit_page,"NO",410,265,0.7f);
+    if(!quit_choices[0] || !quit_choices[1])return;
+    WORD(quit_choices[0]+0xBC)=QUIT_YES;WORD(quit_choices[1]+0xBC)=QUIT_NO;
+    for(int i=0;i<2;++i) {
+        WORD(quit_choices[i]+0x6C)=0;
+        for(int link=0x94;link<=0xA0;link+=4)WORD(quit_choices[i]+link)=quit_choices[1-i];
+    }
+    quit_entry=button(MAIN_MENU,"QUIT GAME",391,339,0.875f);
+    if(!quit_entry)return;
+    WORD(quit_entry+0x6C)=0;WORD(quit_entry+0xBC)=OPEN_QUIT;
+    WORD(quit_entry+0x9C)=0x46F6E8;WORD(quit_entry+0xA0)=0x46F3C8;
+    quit_selected=1;update_quit();
+}
+
+static void open_quit(void)
+{
+    uint32_t args[]={quit_page,0};
+    quit_selected=1;update_quit();remember_menu_keys();
+    WORD(quit_entry+0x80)=0;
+    int w,h;
+    xbox_FramebufferPointer(&pointer_x,&pointer_y,&w,&h);
+    xbox_FramebufferMouseClicks(0);
+    call(sub_0002A807,0,args,2);g_esp+=4;
+}
+/* The runtime maps an Xbox dashboard return to desktop exit. Sam's unused
+ * shell Quit instead tears down the entire engine and can stall in shutdown.
+ * This entry is only on the main menu; native PC choices persist on change. */
+static void quit_desktop(void) {xbox_HalReturnToFirmware(2);g_esp+=4;}
+static void quit_yes(void) {call(quit_desktop,0,NULL,0);g_esp+=4;}
+static void quit_no(void) {call(sub_0002B52A,0,NULL,0);g_esp+=4;}
+static void quit_key(void)
+{
+    uint32_t key=WORD(g_esp+4);
+    if(key==VK_ESCAPE)call(sub_0002B52A,0,NULL,0);
+    else if(key==VK_UP || key==VK_DOWN || key==VK_LEFT || key==VK_RIGHT)quit_selected^=1;
+    else if(key==VK_RETURN || key==0x64)call(quit_selected?sub_0002B52A:quit_desktop,0,NULL,0);
+    update_quit();g_eax=1;g_esp+=12;
+}
+static void quit_frame(void)
+{
+    int x,y,w,h,click=xbox_FramebufferMouseClicks(0);
+    if(!xbox_FramebufferPointer(&x,&y,&w,&h) || !w || !h)return;
+    float vw=(float)w,vh=vw*3/4;
+    if(vh>h){vh=(float)h;vw=vh*4/3;}
+    float gx=(x-(w-vw)/2)*640/vw,gy=(y-(h-vh)/2)*480/vh;
+    if(gy>=265 && gy<310 && ((gx>=140 && gx<270) || (gx>=350 && gx<470)) &&
+       (x!=pointer_x || y!=pointer_y || click)) {
+        quit_selected=gx<305?0:1;
+        if(click)call(quit_selected?sub_0002B52A:quit_desktop,0,NULL,0);
+        update_quit();
+    }
+    pointer_x=x;pointer_y=y;
 }
 
 static void update_settings_page(void)

@@ -7,6 +7,7 @@ ptrdiff_t g_xbox_mem_offset;
 static int down[0x108], mouse_dx,mouse_dy,raw_mouse,capture;
 static int clicks[5], wheel, pointer_on, px,py,pw,ph,backs;
 static int menu_events,last_menu_key,start_pulses;
+static int quits;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1);}}while(0)
 uint32_t xbox_HeapAlloc(uint32_t size,uint32_t alignment){(void)size;(void)alignment;abort();}
 void sub_0002F12B(void){abort();}
@@ -14,6 +15,7 @@ void sub_0002727C(void){abort();}
 void sub_0002A807(void){abort();}
 void sub_0002B52A(void){++backs;g_esp+=4;}
 void sub_0002B588(void){++menu_events;last_menu_key=(int)WORD(g_esp+4);g_esp+=4;}
+VOID __stdcall xbox_HalReturnToFirmware(ULONG routine){CHECK(routine==2);++quits;}
 void xbox_KbmSetMenuMode(int on){(void)on;}
 void xbox_KbmSetRawMouse(int on){raw_mouse=on;}
 void xbox_KbmSetCapture(int on){capture=on;}
@@ -123,6 +125,19 @@ int main(void)
     down[VK_ESCAPE]=1;pc_controls_frame();CHECK(start_pulses==1);
     pc_controls_frame();CHECK(start_pulses==1);
     WORD(ACTIVE_MENU)=page;pc_controls_frame();CHECK(menu_events==2); /* held pause cannot go Back */
+    quit_page=0x630000;quit_choices[0]=0x630100;quit_choices[1]=0x630300;
+    quit_selected=1;g_esp=0x30000;WORD(g_esp+4)=VK_RETURN;
+    pc_controls_dispatch(QUIT_KEY)();CHECK(backs==2 && quits==0 && g_esp==0x3000C);
+    g_esp=0x30000;WORD(g_esp+4)=VK_LEFT;pc_controls_dispatch(QUIT_KEY)();
+    CHECK(quit_selected==0 && WORD(quit_page+0x14)==quit_choices[0]);
+    g_esp=0x30000;WORD(g_esp+4)=VK_ESCAPE;pc_controls_dispatch(QUIT_KEY)();CHECK(backs==3 && quits==0);
+    g_esp=0x30000;WORD(g_esp+4)=0x64;pc_controls_dispatch(QUIT_KEY)();CHECK(quits==1 && g_esp==0x3000C);
+    CHECK(g_ebx==44 && g_esi==45 && g_edi==46);
+    pointer_on=1;pw=640;ph=480;px=pointer_x=200;py=pointer_y=285;quit_selected=1;
+    quit_frame();CHECK(quit_selected==1); /* an unmoved pointer cannot replace default No */
+    px=201;quit_frame();CHECK(quit_selected==0);
+    px=300;clicks[0]=1;quit_frame();CHECK(quits==1); /* gap between buttons */
+    px=200;clicks[0]=1;quit_frame();CHECK(quits==2);
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }
