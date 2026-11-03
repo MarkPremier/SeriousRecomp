@@ -1289,3 +1289,41 @@ unreachable tail reference alone is not evidence of a broken runtime path.
 The `8B334` continuation, unlike that example, has no emitted label and warrants
 further exception-CFG coverage work. Do not blindly seed the ten stubs as new
 function starts, since legitimate continuation code inherits its parent's frame.
+
+## 2026-11-04: restore Options entrance animation
+
+The PC menu layout regression overwrote each gadget's animated endpoint while
+compacting the Options rows. Original `0x30D00` calls the position setter followed
+by `0x1AFBA` with transition 2/3 on alternating rows. The position setter writes
+both resting (`+0x14/+0x18`) and animated (`+0x28/+0x2C`) coordinates; transition
+2/3 then offsets animated X by -/+640. Our subsequent `position()` wrote both X
+values back to 140, deleting that displacement and making list items appear
+instantly even while the heading and outgoing main menu still animated.
+
+`options_position()` now positions each row, then calls the original generated
+transition setter through the existing register-preserving guest-call helper.
+Visible original rows and both PC entries alternate together. Sam still supplies
+the animation clock, easing, entry and exit handling. No renderer, timer, FPS cap,
+controller mapping or Turok files changed.
+
+The PC controls test now extracts and executes the actual generated transition
+setter and its position helpers. It checks off-screen endpoints, alternating
+directions, compacted hidden-row layouts, navigation, stack and FPU stack balance.
+A private build combining these tests with the old production layout fails on
+the endpoint assertion; the fixed layout passes. All seven title tests pass.
+No generated game code is checked in.
+
+Native verification uses private sparse profile copies and runtime BMP exports:
+`analysis/options_animation_before/options_00..11.bmp` show the old list already
+at its resting coordinates while other menu parts animate. The matching
+`analysis/options_animation_after` sequence shows original and PC rows entering
+from alternating sides and settling correctly. Each directory's `entrance.png`
+is a contact sheet. The final executable launch omitted GAME_DIR, discovered
+`test_clean` normally, and used private controls/settings paths. These are runtime
+framebuffer exports, not OS window captures. The isolated test processes were
+stopped after recording; the user's saves and settings were untouched.
+
+Final Release executable SHA-256:
+`4D12FF74DE8DCDB987B8870660F3D50F733E13457B6B60FC3EE08EE62D6C4A6D`.
+The earlier lighting and Quit corrections remain included; existing open issues
+are unchanged.

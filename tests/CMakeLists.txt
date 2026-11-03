@@ -27,6 +27,10 @@ add_test(NAME pc_settings COMMAND pc_settings_test)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SAM_GEN "${CMAKE_CURRENT_LIST_DIR}/../src/recomp/gen")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/extract_menu_animation.py"
+    "${SAM_GEN}/recomp_0001.c" "${CMAKE_CURRENT_BINARY_DIR}/sam_menu_animation.inc"
+    COMMAND_ERROR_IS_FATAL ANY)
+target_include_directories(pc_controls_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINARY_DIR}")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/extract_lightmap_mask.py"
     "${SAM_GEN}/recomp_0054.c" "${CMAKE_CURRENT_BINARY_DIR}/sam_lightmap_mask.inc"
     COMMAND_ERROR_IS_FATAL ANY)

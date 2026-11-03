@@ -4,6 +4,16 @@
 
 RECOMP_TLS uint32_t g_eax,g_ecx,g_edx,g_ebx,g_esi,g_edi,g_esp,g_ebp,g_seh_ebp;
 ptrdiff_t g_xbox_mem_offset;
+#define RECOMP_GENERATED_CODE
+#include "recomp_types.h"
+RECOMP_TLS double g_fp_stack[8];
+RECOMP_TLS int g_fp_top;
+RECOMP_TLS uint16_t g_fp_control_word=0x27F;
+#include "sam_menu_animation.inc"
+recomp_func_t recomp_lookup(uint32_t va){fprintf(stderr,"Unexpected animation tail %08X\n",va);abort();}
+recomp_func_t recomp_lookup_manual(uint32_t va){return recomp_lookup(va);}
+recomp_func_t recomp_lookup_kernel(uint32_t va){return recomp_lookup(va);}
+void recomp_icall_fail_log(uint32_t va){(void)va;abort();}
 static int down[0x108], mouse_dx,mouse_dy,raw_mouse,capture;
 static int clicks[5], wheel, pointer_on, px,py,pw,ph,backs;
 static int menu_events,last_menu_key,start_pulses;
@@ -38,6 +48,36 @@ void pc_settings_poll(void){}
 static void clear_axes(void){memset(PTR(0x480468),0,12*4);}
 static void close_enough(float value,float expected){CHECK(fabsf(value-expected)<0.00001f);}
 
+static void options_animation_test(void)
+{
+    static const uint32_t original[]={0x472768,0x472830,0x4728F8,0x4729E8,0x472AB0,0x472BA0};
+    entry=0x640000;settings_entry=0x640200;g_esp=0x70000;
+    /* Native switch targets for slide-left and slide-right. */
+    WORD(0x1B095+4)=0x1AFFD;WORD(0x1B095+8)=0x1B00E;
+    for(int hidden=-1;hidden<2;++hidden) {
+        unsigned n=0;uint32_t order[8];
+        for(int i=0;i<6;++i) {
+            WORD(original[i]+0x80)=i!=hidden;
+            FLOAT(original[i]+0x20)=FLOAT(original[i]+0x34)=0.8f;
+            if(i!=hidden)order[n++]=original[i];
+        }
+        order[n]=entry;order[n+1]=settings_entry;
+        pc_controls_options_layout();
+        CHECK(g_esp==0x70000 && g_fp_top==0);
+        for(unsigned i=0;i<n+2;++i) {
+            uint32_t row=order[i];
+            close_enough(FLOAT(row+0x14),140);
+            close_enough(FLOAT(row+0x28),140+(i&1?640:-640));
+            close_enough(FLOAT(row+0x18),157+30.0f*i-(i>=n?19:0));
+            close_enough(FLOAT(row+0x2C),FLOAT(row+0x18));
+            CHECK(WORD(row+0x8C)==2+(i&1));
+        }
+        CHECK(WORD(order[n-1]+0xA0)==entry && WORD(entry+0xA0)==settings_entry);
+        CHECK(WORD(order[0]+0x9C)==settings_entry && WORD(settings_entry+0xA0)==order[0]);
+    }
+    entry=settings_entry=0;
+}
+
 int main(void)
 {
     char temp[MAX_PATH],path[MAX_PATH],label[64];
@@ -47,6 +87,7 @@ int main(void)
     _putenv_s("RECOMP_KBM","1");
     g_xbox_mem_offset=(ptrdiff_t)calloc(1,0x800000);
     CHECK(g_xbox_mem_offset);
+    options_animation_test();
     pc_controls_load();CHECK(enabled && keys[JUMP]==VK_SPACE && keys[USE]==MOUSE2 && speed==5);
     CHECK(named_key("1")=='1' && named_key("Wheel down")==WHEEL_DOWN && named_key("garbage")==-1);
     WritePrivateProfileStringA("paths","game_dir","unchanged",path);

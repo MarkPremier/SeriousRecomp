@@ -14,7 +14,24 @@ project is the reference for how the pipeline works and for the kinds of bugs to
 It is in active use by another agent, so **read it, but never modify it** (see
 "Do not touch").
 
-## Current state (2026-11-03)
+## Current state (2026-11-04)
+
+- **Options entrance animation:** the PC-row layout must call Sam's transition
+  setter `sub_0001AFBA` after positioning each visible Options row. `position()`
+  writes both resting and animated endpoints; using it alone erased the native
+  +/-640 horizontal offset and made the rows appear instantly. Use
+  `options_position`, alternating native transition types 2/3 by visible row
+  index, for both original rows and PC Controls / PC Settings. Native timing
+  and easing are unchanged. The controls regression executes the actual
+  generated transition setters (extracted at test configure time) and checks
+  six-row and hidden-row layouts, navigation and guest stack balance. It fails
+  against the prior layout and passes with the fix; all seven tests pass.
+  Runtime frame sequences in `analysis/options_animation_before/entrance.png`
+  and `analysis/options_animation_after/entrance.png` confirm instant vs sliding
+  rows. Final normal-discovery launch uses private saves/settings and test_clean.
+  Installed exe SHA-256
+  `4D12FF74DE8DCDB987B8870660F3D50F733E13457B6B60FC3EE08EE62D6C4A6D`.
+  Turok and the toolkit are untouched by this title-only correction.
 
 - **Quit menu (2026-11-04):** native main-menu Quit Game entry plus a Yes/No
   page, default No, in `pc_controls.c`. Dispatch padding `0x30CFB..E` covers

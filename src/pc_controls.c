@@ -17,6 +17,7 @@ extern RECOMP_TLS uint32_t g_esp, g_ebp, g_seh_ebp;
 extern uint32_t xbox_HeapAlloc(uint32_t size, uint32_t alignment);
 extern void sub_0002F12B(void), sub_0002727C(void), sub_0002A807(void), sub_0002B52A(void);
 extern void sub_0002B588(void);
+extern void sub_0001AFBA(void);
 extern void xbox_KbmSetMenuMode(int on), xbox_KbmSetRawMouse(int on), xbox_KbmSetCapture(int on);
 extern void xbox_KbmSetBinding(const char *target, const int *keys, int count);
 extern void xbox_KbmPulse(const char *target,int ms);
@@ -221,6 +222,16 @@ static void position(uint32_t gadget,float x,float y,float scale)
     FLOAT(gadget+0x20)=FLOAT(gadget+0x34)=scale;
 }
 
+static void options_position(uint32_t gadget,float y,float scale,int row)
+{
+    position(gadget,140,y,scale);
+    /* Position sets both endpoints. Reapply Sam's own transition afterwards:
+     * types 2/3 offset the animated endpoint by -/+640 pixels. The original
+     * Options start routine supplies the animation clock and easing. */
+    uint32_t transition=2+(row&1);
+    call(sub_0001AFBA,gadget,&transition,1);
+}
+
 static uint32_t button(uint32_t screen,const char *label,float x,float y,float scale)
 {
     uint32_t va=alloc(BUTTON_SIZE+TEXT_SIZE);
@@ -327,14 +338,14 @@ void pc_controls_options_layout(void)
     for(unsigned i=0;i<sizeof original/sizeof original[0];++i) {
         uint32_t row=original[i];
         if(!WORD(row+0x80)) continue;
-        position(row,140,157+30.0f*visible,FLOAT(row+0x20));
+        options_position(row,157+30.0f*visible,FLOAT(row+0x20),visible);
         ++visible;
         if(!first) first=row;
         last=row;
     }
     if(!last) return;
-    position(entry,140,157+30.0f*visible-19,0.65f);
-    position(settings_entry,140,157+30.0f*(visible+1)-19,0.65f);
+    options_position(entry,157+30.0f*visible-19,0.65f,visible);
+    options_position(settings_entry,157+30.0f*(visible+1)-19,0.65f,visible+1);
     WORD(last+0xA0)=entry;WORD(first+0x9C)=settings_entry;
     WORD(entry+0x9C)=last;WORD(entry+0xA0)=settings_entry;
     WORD(settings_entry+0x9C)=entry;WORD(settings_entry+0xA0)=first;
