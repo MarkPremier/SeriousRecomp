@@ -52,6 +52,7 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define QUIT_YES      0x00030CFDu
 #define QUIT_NO       0x00030CFEu
 #define MAIN_MENU     0x0046F2A0u
+#define PAUSE_MENU    0x0046E5B0u
 #define VISIBLE_ROWS  9
 #define TEXT_SIZE     128u
 
@@ -77,10 +78,10 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define GADGET_TARGET_Y     0x2Cu
 #define GADGET_TARGET_SCALE 0x34u
 #define GADGET_TEXT         0x4Cu /* char * */
-#define GADGET_6C           0x6Cu /* -1 on list rows, 0 on centred choices; meaning unconfirmed */
+#define GADGET_CENTRED      0x6Cu /* 0 centred on GADGET_X, -1 starting there */
 #define GADGET_FOCUSED      0x7Cu
 #define GADGET_VISIBLE      0x80u
-#define GADGET_ALIGN        0x8Cu
+#define GADGET_TRANSITION   0x8Cu /* entrance animation type (sub_0001AFBA) */
 #define GADGET_LEFT         0x94u /* neighbours for d-pad navigation */
 #define GADGET_RIGHT        0x98u
 #define GADGET_UP           0x9Cu
@@ -138,17 +139,43 @@ static const struct {
         {"pause", "Pause", VK_ESCAPE, 0},
 };
 enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, DEFAULTS_ROW, ROW_COUNT };
+/* The page's BACK button is the stop after the last row, so up/down (keys or a
+ * pad) reach it as they reach the rows; Enter/A there goes back. */
+#define BACK_SELECTED ROW_COUNT
 static int keys[BIND_COUNT], speed = 5, invert_y, enabled;
 /* The thread that runs the title's main loop. The boot movie's worker presents
  * through the same calls as the main loop does, and the menu work here calls
  * Sam's menu code, which only the main thread may run. */
 static DWORD main_thread;
 static DWORD WINAPI movie_thread(LPVOID unused);
+
+/* Which menu is on screen. ACTIVE_MENU alone is not it: B on the pause menu
+ * resumes play but leaves it naming the page that started the level (the
+ * Difficulty page), which is neither drawn nor meant to take keys. A menu is
+ * shown while Sam's menu renderer (sub_0002B6BE, pc_controls_menu_drawn) keeps
+ * drawing it. Until that has run once, ACTIVE_MENU is taken as it is. */
+static volatile LONG menu_draw_ms, menu_draw_seen;
+
+void pc_controls_menu_drawn(void)
+{
+    InterlockedExchange(&menu_draw_ms, (LONG)GetTickCount());
+    InterlockedExchange(&menu_draw_seen, 1);
+}
+
+static uint32_t shown_menu(void)
+{
+    uint32_t menu = WORD(ACTIVE_MENU);
+    if (menu && menu_draw_seen && GetTickCount() - (DWORD)menu_draw_ms > 250) return 0;
+    return menu;
+}
 static char ini[MAX_PATH];
 static uint32_t page, entry, rows[ROW_COUNT], values[ROW_COUNT], title, help, status, back_button;
 static uint32_t settings_page, settings_entry, setting_rows[PC_SETTINGS_ROWS],
         setting_values[PC_SETTINGS_ROWS];
 static int selected_setting;
+static uint32_t settings_back;
+/* As on the controls page, BACK is the stop after the last setting. */
+#define SETTINGS_BACK PC_SETTINGS_ROWS
 static uint32_t quit_entry, quit_page, quit_choices[2];
 static int quit_selected;
 static void build_quit(void), quit_frame(void), open_quit(void), quit_key(void);
@@ -322,6 +349,24 @@ static void position(uint32_t gadget, float x, float y, float scale)
     FLOAT(gadget + GADGET_SCALE) = FLOAT(gadget + GADGET_TARGET_SCALE) = scale;
 }
 
+/* As position, but leaves a button alone when it is already there: rewriting
+ * both endpoints every frame would cancel a slide-in in progress. */
+static void place(uint32_t gadget, float x, float y, float scale)
+{
+    if (FLOAT(gadget + GADGET_X) != x || FLOAT(gadget + GADGET_Y) != y || FLOAT(gadget + GADGET_SCALE) != scale)
+        position(gadget, x, y, scale);
+}
+
+/* The entrance animation Sam's Options rows have: row by row from the left and
+ * the right in turn (transition types 2 and 3), over the menu change's own
+ * clock (sub_00029396, restarted by every ChangeToMenu). A row's label and
+ * value come in together. */
+static void slide_in(uint32_t gadget, int row)
+{
+    uint32_t transition = 2 + (row & 1);
+    if (gadget) call(sub_0001AFBA, gadget, &transition, 1);
+}
+
 static void options_position(uint32_t gadget, float y, float scale, int row)
 {
     position(gadget, 140, y, scale);
@@ -347,8 +392,8 @@ static uint32_t button(uint32_t screen, const char *label, float x, float y, flo
     WORD(va + GADGET_VISIBLE) = WORD(va + 0x74) = 1;
     WORD(va + 0x94) = WORD(va + 0x98) = WORD(va + GADGET_UP) = WORD(va + GADGET_DOWN) = 0;
     WORD(va + 0xA4) = WORD(va + 0xA8) = WORD(va + GADGET_TRIGGER) = WORD(va + 0xC0) = 0;
-    WORD(va + GADGET_6C) = 0xFFFFFFFFu;
-    WORD(va + GADGET_ALIGN) = 2; /* left-aligned text */
+    WORD(va + GADGET_CENTRED) = 0xFFFFFFFFu;
+    WORD(va + GADGET_TRANSITION) = 2;
     position(va, x, y, scale);
     text(va, label);
     call(sub_0002727C, screen, &va, 1);
@@ -358,14 +403,16 @@ static uint32_t button(uint32_t screen, const char *label, float x, float y, flo
 static void update_page(void)
 {
     char label[128];
-    if (selected < scroll) scroll = selected;
-    if (selected >= scroll + VISIBLE_ROWS) scroll = selected - VISIBLE_ROWS + 1;
+    if (selected < ROW_COUNT) {
+        if (selected < scroll) scroll = selected;
+        if (selected >= scroll + VISIBLE_ROWS) scroll = selected - VISIBLE_ROWS + 1;
+    }
     for (int i = 0; i < ROW_COUNT; ++i) {
         int visible = i >= scroll && i < scroll + VISIBLE_ROWS;
         WORD(rows[i] + GADGET_VISIBLE) = WORD(values[i] + GADGET_VISIBLE) = visible;
         WORD(rows[i] + GADGET_FOCUSED) = WORD(values[i] + GADGET_FOCUSED) = i == selected;
-        position(rows[i], 90, 145 + (i - scroll) * 26.0f, 0.57f);
-        position(values[i], 410, 145 + (i - scroll) * 26.0f, 0.57f);
+        place(rows[i], 90, 145 + (i - scroll) * 26.0f, 0.57f);
+        place(values[i], 410, 145 + (i - scroll) * 26.0f, 0.57f);
         if (i < BIND_COUNT) {
             if (i == capturing)
                 snprintf(label, sizeof label, "Press a key...");
@@ -379,7 +426,8 @@ static void update_page(void)
             snprintf(label, sizeof label, "Enter / A");
         text(values[i], label);
     }
-    WORD(page + SCREEN_FOCUS) = rows[selected];
+    WORD(back_button + GADGET_FOCUSED) = selected == BACK_SELECTED;
+    WORD(page + SCREEN_FOCUS) = selected == BACK_SELECTED ? back_button : rows[selected];
     snprintf(label, sizeof label, "%d - %d of %d", scroll + 1,
              scroll + VISIBLE_ROWS < ROW_COUNT ? scroll + VISIBLE_ROWS : ROW_COUNT, ROW_COUNT);
     text(status, label);
@@ -461,7 +509,7 @@ void pc_controls_build_menu(void)
     }
     if (!button(settings_page, "Changes apply immediately", 90, 370, 0.43f) ||
         !button(settings_page, "Arrows: select   Left/Right/A: change   Esc/B: back", 55, 430, 0.38f) ||
-        !button(settings_page, "BACK", 510, 397, 0.5f))
+        !(settings_back = button(settings_page, "BACK", 510, 397, 0.5f)))
         return;
     settings_entry = button(OPTIONS, "PC SETTINGS", 140, 400, 0.65f);
     if (!settings_entry) return;
@@ -577,6 +625,12 @@ static void open_page(void)
         selected = scroll = 0;
         cancel_capture();
         update_page();
+        for (int i = 0; i < VISIBLE_ROWS && i < ROW_COUNT; ++i) {
+            slide_in(rows[i], i);
+            slide_in(values[i], i);
+        }
+        slide_in(status, VISIBLE_ROWS);
+        slide_in(back_button, VISIBLE_ROWS + 1);
         int w, h;
         xbox_FramebufferPointer(&pointer_x, &pointer_y, &w, &h);
         for (int i = 0; i < 5; ++i) xbox_FramebufferMouseClicks(i);
@@ -597,10 +651,12 @@ static void page_key(void)
             call(sub_0002B52A, 0, NULL, 0);
     } else if (capturing < 0) {
         if (key == VK_UP)
-            selected = (selected + ROW_COUNT - 1) % ROW_COUNT;
+            selected = (selected + ROW_COUNT) % (ROW_COUNT + 1);
         else if (key == VK_DOWN)
-            selected = (selected + 1) % ROW_COUNT;
-        else if (key == VK_RETURN || key == 0x64 || key == VK_LEFT || key == VK_RIGHT)
+            selected = (selected + 1) % (ROW_COUNT + 1);
+        else if (selected == BACK_SELECTED) {
+            if (key == VK_RETURN || key == 0x64) call(sub_0002B52A, 0, NULL, 0);
+        } else if (key == VK_RETURN || key == 0x64 || key == VK_LEFT || key == VK_RIGHT)
             change_row(key == VK_LEFT ? -1 : 1);
         else if (key == VK_DELETE && selected < BIND_COUNT)
             set_key(selected, 0);
@@ -625,7 +681,7 @@ void (*pc_controls_dispatch(uint32_t address))(void)
 
 static void follow_mode(void)
 {
-    int in_menu = WORD(ACTIVE_MENU) != 0, dx, dy;
+    int in_menu = shown_menu() != 0, dx, dy;
     if (menu_mode != in_menu) {
         menu_mode = in_menu;
         xbox_KbmSetMenuMode(in_menu);
@@ -644,7 +700,7 @@ static void follow_mode(void)
 static void keyboard_frame(void)
 {
     if (!enabled) return;
-    if (!WORD(ACTIVE_MENU)) {
+    if (!shown_menu()) {
         int down = physical_down(keys[PAUSE]);
         if (down && !pause_held) xbox_KbmPulse("START", 350);
         pause_held = down;
@@ -661,7 +717,7 @@ static void keyboard_frame(void)
         if (i < 4) menu_repeat[i] = now + (was_held ? 100 : 350);
         uint32_t args[] = {(uint32_t)menu_keys[i][2], 0};
         call(sub_0002B588, 0, args, 2);
-        if (capturing >= 0 || !WORD(ACTIVE_MENU)) break;
+        if (capturing >= 0 || !shown_menu()) break;
     }
 }
 
@@ -693,9 +749,11 @@ static DWORD WINAPI movie_thread(LPVOID unused)
 }
 
 /* Widescreen policy. The front end is drawn for 4:3 (its backdrop, and Sam's
- * head as a 3D model) and stays 4:3; a level, and the pause menu over it, use
- * the Aspect ratio setting. A level is running from the first frame with no
- * menu and no movie until the main menu comes back. */
+ * head as a 3D model) and stays 4:3; a level, and the pause menu drawn over
+ * it, use the Aspect ratio setting. The pages the pause menu opens (Options
+ * and the rest) are full-screen front-end pages, with their own backdrop and
+ * 3D bomb, so they are 4:3 as well. A level is running from the first frame
+ * with no menu and no movie until the main menu comes back. */
 static float view_wide = 1.0f;
 
 float pc_controls_view_wide(void)
@@ -706,12 +764,17 @@ float pc_controls_view_wide(void)
 static void wide_frame(void)
 {
     static int in_level;
-    uint32_t menu = WORD(ACTIVE_MENU);
+    static uint32_t last_menu = 1;
+    uint32_t menu = shown_menu();
+    if (menu != last_menu && getenv("RECOMP_MENU_MOUSE_TRACE")) {
+        fprintf(stderr, "[MENU] active %08X (was %08X) at %lu ms\n", menu, last_menu, GetTickCount());
+    }
+    last_menu = menu;
     if (menu == MAIN_MENU)
         in_level = 0;
     else if (!menu && !xbox_VideoActive())
         in_level = 1;
-    float wide = in_level ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
+    float wide = in_level && (!menu || menu == PAUSE_MENU) ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
     if (fabsf(wide - view_wide) > 0.0001f) {
         view_wide = wide;
         nv2a_gpu_set_wide_factor(wide);
@@ -719,29 +782,200 @@ static void wide_frame(void)
     }
 }
 
+/* ── Mouse in Sam's own menus ──────────────────────────────────────────────
+ *
+ * As in Turok's: moving over an entry focuses it, a left click chooses it (on
+ * an option row, the next value), a right click is Back (on an option row, the
+ * previous value), and the wheel moves up and down (over an option row, its
+ * value). The PC pages above handle their own pointer.
+ *
+ * A page's buttons are a list from page +0x04 through each button's node at
+ * +0x08 (sub_0002727C adds one). Focus works as the page's own OnKeyDown
+ * (0x0002AC71) moves it: the old button's KillFocus (vtable +0x10), the new
+ * one's SetFocus (+0x0C). Only buttons reachable from the focused one through
+ * the up/down/left/right links can take focus, which leaves out titles,
+ * labels and button hints. A button's own OnKeyDown (+0x00) takes Left/Right
+ * when it is an option row (a slider or a choice); anything else answers 0. */
+#define GADGET_NODE        0x08u
+#define SCREEN_GADGETS     0x04u
+#define VTABLE_GADGET_KEY  0x00u
+#define VTABLE_SET_FOCUS   0x0Cu
+#define VTABLE_KILL_FOCUS  0x10u
+#define MENU_SOUND_CHANGE  0x0047013Cu /* what sub_0002B588 plays for a handled key */
+#define MAX_MENU_GADGETS   64
+extern void sub_00028A11(void);
+extern void (*recomp_lookup(uint32_t va))(void);
+
+static int guest_object(uint32_t va)
+{
+    return va >= 0x10000 && va < 0x08000000;
+}
+
+static uint32_t virtual_call(uint32_t object, uint32_t slot, const uint32_t *args, unsigned count)
+{
+    void (*fn)(void) = recomp_lookup(WORD(WORD(object) + slot));
+    return fn ? call(fn, object, args, count) : 0;
+}
+
+/* The focusable buttons of `menu`: those linked, directly or not, to the
+ * focused one. Returns their count; *focused is 0 if none has the focus. */
+static int menu_buttons(uint32_t menu, uint32_t *out, uint32_t *focused)
+{
+    int n = 0;
+    *focused = 0;
+    for (uint32_t node = WORD(menu + SCREEN_GADGETS), guard = 0; guest_object(node) && WORD(node) && guard < 256;
+         node = WORD(node), ++guard)
+        if (WORD(node - GADGET_NODE + GADGET_FOCUSED)) *focused = node - GADGET_NODE;
+    if (!*focused) return 0;
+    out[n++] = *focused;
+    for (int i = 0; i < n; ++i)
+        for (uint32_t link = GADGET_LEFT; link <= GADGET_DOWN; link += 4) {
+            uint32_t next = WORD(out[i] + link);
+            int seen = !guest_object(next) || !WORD(next + GADGET_VISIBLE);
+            for (int j = 0; j < n && !seen; ++j) seen = out[j] == next;
+            if (!seen && n < MAX_MENU_GADGETS) out[n++] = next;
+        }
+    return n;
+}
+
+/* Where a button is, in the 640x480 menu space, as Sam's own Render
+ * (0x0001B3D2) places it: sub_0001B237 gives the top left (its anchor moved
+ * by the alignment at +0x6C / +0x70), vtable +0x20 the text's size in its own
+ * font, and the page it is on adds its offset (+0x24, +0x28). A row starting
+ * at its anchor with no other button beside it reaches across to its value
+ * (a slider's bar, a choice's setting), which its text box does not cover. */
+#define GADGET_SCREEN     0x10u
+#define VTABLE_TEXT_SIZE  0x20u
+#define SCREEN_OFFSET_X   0x24u
+#define SCREEN_OFFSET_Y   0x28u
+extern void sub_0001B237(void);
+
+static void button_box(uint32_t button, const uint32_t *all, int n, float box[4])
+{
+    static uint32_t scratch;
+    if (!scratch) scratch = alloc(16);
+    uint32_t corner[] = {scratch, scratch + 4}, size[] = {scratch + 8, scratch + 12, 1};
+    call(sub_0001B237, button, corner, 2);
+    virtual_call(button, VTABLE_TEXT_SIZE, size, 3);
+    uint32_t screen = WORD(button + GADGET_SCREEN);
+    float dx = guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_X) : 0.0f;
+    float dy = guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_Y) : 0.0f;
+    float y = FLOAT(button + GADGET_Y);
+    int alone = 1;
+    for (int i = 0; i < n; ++i)
+        if (all[i] != button && fabsf(FLOAT(all[i] + GADGET_Y) - y) < 10.0f) alone = 0;
+    box[0] = FLOAT(scratch) + dx;
+    box[1] = FLOAT(scratch + 4) + dy;
+    box[2] = box[0] + FLOAT(scratch + 8);
+    box[3] = box[1] + FLOAT(scratch + 12);
+    if (alone && WORD(button + GADGET_CENTRED) == 0xFFFFFFFFu && box[2] < 620.0f) box[2] = 620.0f;
+}
+
+static uint32_t button_at(const uint32_t *all, int n, float gx, float gy)
+{
+    uint32_t best = 0;
+    float best_distance = 1e9f;
+    for (int i = 0; i < n; ++i) {
+        float box[4];
+        button_box(all[i], all, n, box);
+        if (gx < box[0] - 6 || gx > box[2] + 6 || gy < box[1] - 3 || gy > box[3] + 3) continue;
+        float dx = gx - (box[0] + box[2]) / 2, dy = gy - (box[1] + box[3]) / 2;
+        if (dx * dx + dy * dy < best_distance) {
+            best_distance = dx * dx + dy * dy;
+            best = all[i];
+        }
+    }
+    return best;
+}
+
+/* Send a key to `button` alone; nonzero when it took it (an option row). */
+static int button_key(uint32_t button, uint32_t key)
+{
+    uint32_t args[] = {key};
+    if (!virtual_call(button, VTABLE_GADGET_KEY, args, 1)) return 0;
+    uint32_t sound = WORD(MENU_SOUND_CHANGE);
+    call(sub_00028A11, 0, &sound, 1);
+    return 1;
+}
+
+/* A key to the whole menu, as the keyboard sends it. */
+static void menu_key(uint32_t key)
+{
+    uint32_t args[] = {key, 0};
+    call(sub_0002B588, 0, args, 2);
+}
+
+static void native_mouse_frame(void)
+{
+    static int last_x = -1, last_y = -1;
+    uint32_t menu = shown_menu(), buttons[MAX_MENU_GADGETS], focused, hit;
+    int x, y, w, h, n;
+    if (!menu || menu == page || menu == settings_page || menu == quit_page || capturing >= 0) return;
+    int click = xbox_FramebufferMouseClicks(0), right = xbox_FramebufferMouseClicks(1);
+    int wheel = xbox_KbmMenuWheel();
+    if (!xbox_FramebufferPointer(&x, &y, &w, &h)) {
+        if ((click || right) && getenv("RECOMP_MENU_MOUSE_TRACE"))
+            fprintf(stderr, "[MENU MOUSE] menu %08X: no pointer\n", menu);
+        return;
+    }
+    int moved = x != last_x || y != last_y;
+    last_x = x;
+    last_y = y;
+    if (!moved && !click && !right && !wheel) return;
+    n = menu_buttons(menu, buttons, &focused);
+    if (!n) return;
+    /* Menus are drawn for 4:3, centred in the window (also over a widescreen
+     * level, where the 2D is squeezed back to the middle). */
+    float view_w = (float)w, view_h = (float)w * 3 / 4;
+    if (view_h > h) {
+        view_h = (float)h;
+        view_w = (float)h * 4 / 3;
+    }
+    float gx = (x - ((float)w - view_w) / 2) * 640 / view_w, gy = (y - ((float)h - view_h) / 2) * 480 / view_h;
+    hit = button_at(buttons, n, gx, gy);
+    if ((click || right) && getenv("RECOMP_MENU_MOUSE_TRACE")) {
+        fprintf(stderr, "[MENU MOUSE] menu %08X at %.0f,%.0f: %d buttons, focused %08X, hit %08X\n", menu, gx, gy,
+                n, focused, hit);
+        for (int i = 0; i < n; ++i) {
+            float box[4];
+            button_box(buttons[i], buttons, n, box);
+            fprintf(stderr, "[MENU MOUSE]   %08X vt %08X %.0f,%.0f - %.0f,%.0f\n", buttons[i], WORD(buttons[i]),
+                    box[0], box[1], box[2], box[3]);
+        }
+    }
+    if (hit && hit != focused && (moved || click || right || wheel)) {
+        virtual_call(focused, VTABLE_KILL_FOCUS, NULL, 0);
+        virtual_call(hit, VTABLE_SET_FOCUS, NULL, 0);
+    }
+    if (click && hit && !button_key(hit, VK_RIGHT)) menu_key(VK_RETURN);
+    if (right && !(hit && button_key(hit, VK_LEFT))) menu_key(VK_ESCAPE);
+    if (wheel && !(hit && button_key(hit, wheel > 0 ? VK_RIGHT : VK_LEFT))) menu_key(wheel > 0 ? VK_UP : VK_DOWN);
+}
+
 void pc_controls_frame(void)
 {
     if (GetCurrentThreadId() != main_thread) return;
     wide_frame();
-    if (quit_entry) WORD(quit_entry + GADGET_VISIBLE) = WORD(ACTIVE_MENU) == MAIN_MENU;
-    if (quit_entry && WORD(ACTIVE_MENU) == MAIN_MENU) {
+    if (quit_entry) WORD(quit_entry + GADGET_VISIBLE) = shown_menu() == MAIN_MENU;
+    if (quit_entry && shown_menu() == MAIN_MENU) {
         WORD(MAIN_MENU_LAST + GADGET_DOWN) = quit_entry;
         WORD(TEMPLATE_BUTTON + GADGET_UP) = quit_entry;
     }
     follow_mode();
     keyboard_frame();
     pc_settings_poll();
-    if (quit_page && WORD(ACTIVE_MENU) == quit_page) {
+    if (quit_page && shown_menu() == quit_page) {
         quit_frame();
         return;
     }
-    if (settings_page && WORD(ACTIVE_MENU) == settings_page) {
+    if (settings_page && shown_menu() == settings_page) {
         if (capturing >= 0) cancel_capture();
         settings_frame();
         return;
     }
-    if (!page || WORD(ACTIVE_MENU) != page) {
+    if (!page || shown_menu() != page) {
         if (capturing >= 0) cancel_capture();
+        if (enabled) native_mouse_frame();
         return;
     }
     int wheel = xbox_KbmMenuWheel();
@@ -780,9 +1014,11 @@ void pc_controls_frame(void)
             /* The title font's glyphs sit below the text button's anchor;
              * use their visible 26-pixel rows, rather than the anchor itself. */
             int row = scroll + (int)((gy - 154) / 26);
-            if (click && gx >= 495 && gx <= 610 && gy >= 390 && gy < 425)
-                call(sub_0002B52A, 0, NULL, 0);
-            else if (gx >= 75 && gx <= 610 && gy >= 154 && gy < 154 + VISIBLE_ROWS * 26 && row < ROW_COUNT &&
+            int moved = x != pointer_x || y != pointer_y;
+            if (gx >= 495 && gx <= 610 && gy >= 390 && gy < 425) {
+                if (moved) selected = BACK_SELECTED;
+                if (click) call(sub_0002B52A, 0, NULL, 0);
+            } else if (gx >= 75 && gx <= 610 && gy >= 154 && gy < 154 + VISIBLE_ROWS * 26 && row < ROW_COUNT &&
                      (x != pointer_x || y != pointer_y || click || right)) {
                 selected = row;
                 if (right && selected < BIND_COUNT)
@@ -827,12 +1063,12 @@ static void build_quit(void)
     WORD(quit_choices[0] + GADGET_TRIGGER) = QUIT_YES;
     WORD(quit_choices[1] + GADGET_TRIGGER) = QUIT_NO;
     for (int i = 0; i < 2; ++i) {
-        WORD(quit_choices[i] + GADGET_6C) = 0;
+        WORD(quit_choices[i] + GADGET_CENTRED) = 0;
         for (uint32_t link = GADGET_LEFT; link <= GADGET_DOWN; link += 4) WORD(quit_choices[i] + link) = quit_choices[1 - i];
     }
     quit_entry = button(MAIN_MENU, "QUIT GAME", 391, 339, 0.875f);
     if (!quit_entry) return;
-    WORD(quit_entry + GADGET_6C) = 0;
+    WORD(quit_entry + GADGET_CENTRED) = 0;
     WORD(quit_entry + GADGET_TRIGGER) = OPEN_QUIT;
     WORD(quit_entry + GADGET_UP) = MAIN_MENU_LAST;
     WORD(quit_entry + GADGET_DOWN) = TEMPLATE_BUTTON;
@@ -916,7 +1152,9 @@ static void update_settings_page(void)
             snprintf(label, sizeof label, "< %s >", value);
         text(setting_values[i], label);
     }
-    WORD(settings_page + SCREEN_FOCUS) = setting_rows[selected_setting];
+    WORD(settings_back + GADGET_FOCUSED) = selected_setting == SETTINGS_BACK;
+    WORD(settings_page + SCREEN_FOCUS) =
+            selected_setting == SETTINGS_BACK ? settings_back : setting_rows[selected_setting];
 }
 
 static void open_settings_page(void)
@@ -927,6 +1165,11 @@ static void open_settings_page(void)
         selected_setting = 0;
         cancel_capture();
         update_settings_page();
+        for (int i = 0; i < PC_SETTINGS_ROWS; ++i) {
+            slide_in(setting_rows[i], i);
+            slide_in(setting_values[i], i);
+        }
+        slide_in(settings_back, PC_SETTINGS_ROWS);
         xbox_FramebufferPointer(&pointer_x, &pointer_y, &w, &h);
         for (int i = 0; i < 5; ++i) xbox_FramebufferMouseClicks(i);
         xbox_KbmMenuWheel();
@@ -941,10 +1184,12 @@ static void settings_key(void)
     if (key == VK_ESCAPE)
         call(sub_0002B52A, 0, NULL, 0);
     else if (key == VK_UP)
-        selected_setting = (selected_setting + PC_SETTINGS_ROWS - 1) % PC_SETTINGS_ROWS;
+        selected_setting = (selected_setting + PC_SETTINGS_ROWS) % (PC_SETTINGS_ROWS + 1);
     else if (key == VK_DOWN)
-        selected_setting = (selected_setting + 1) % PC_SETTINGS_ROWS;
-    else if (key == VK_RETURN || key == 0x64 || key == VK_LEFT || key == VK_RIGHT)
+        selected_setting = (selected_setting + 1) % (PC_SETTINGS_ROWS + 1);
+    else if (selected_setting == SETTINGS_BACK) {
+        if (key == VK_RETURN || key == 0x64) call(sub_0002B52A, 0, NULL, 0);
+    } else if (key == VK_RETURN || key == 0x64 || key == VK_LEFT || key == VK_RIGHT)
         pc_settings_step(selected_setting, key == VK_LEFT ? -1 : 1);
     update_settings_page();
     g_eax = 1;
@@ -964,9 +1209,10 @@ static void settings_frame(void)
         float gx = (x - ((float)w - view_w) / 2) * 640 / view_w;
         float gy = (y - ((float)h - view_h) / 2) * 480 / view_h;
         int row = (int)((gy - 154) / 26);
-        if (click && gx >= 495 && gx <= 610 && gy >= 390 && gy < 425)
-            call(sub_0002B52A, 0, NULL, 0);
-        else if (gx >= 75 && gx <= 630 && gy >= 154 && gy < 154 + PC_SETTINGS_ROWS * 26 &&
+        if (gx >= 495 && gx <= 610 && gy >= 390 && gy < 425) {
+            if (x != pointer_x || y != pointer_y) selected_setting = SETTINGS_BACK;
+            if (click) call(sub_0002B52A, 0, NULL, 0);
+        } else if (gx >= 75 && gx <= 630 && gy >= 154 && gy < 154 + PC_SETTINGS_ROWS * 26 &&
                  (x != pointer_x || y != pointer_y || click || right)) {
             selected_setting = row;
             if (click || right) pc_settings_step(row, right ? -1 : 1);
@@ -985,9 +1231,15 @@ static void settings_frame(void)
 int pc_controls_input_begin(uint32_t profile)
 {
     injected = 0;
+    /* The action builder runs every game tick, also when no presenter this
+     * file hooks does (after Back on the pause menu the engine plays on with
+     * ACTIVE_MENU still naming the Difficulty page and neither vblank wait
+     * nor the menu renderer called), so the widescreen policy follows here
+     * too. */
+    if (GetCurrentThreadId() == main_thread) wide_frame();
     follow_mode();
-    if (!WORD(ACTIVE_MENU)) keyboard_frame();
-    if (!enabled || capturing >= 0 || WORD(ACTIVE_MENU) || profile < 0x10000 || profile > 0x07FFFFC0 ||
+    if (!shown_menu()) keyboard_frame();
+    if (!enabled || capturing >= 0 || shown_menu() || profile < 0x10000 || profile > 0x07FFFFC0 ||
         WORD(profile + 0x38) != 0)
         return 0;
     /* The original action builder returns early without consuming controls

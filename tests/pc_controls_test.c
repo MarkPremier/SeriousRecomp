@@ -24,6 +24,8 @@ void sub_0002F12B(void){abort();}
 void sub_0002727C(void){abort();}
 void sub_0002A807(void){abort();}
 void sub_0002B52A(void){++backs;g_esp+=4;}
+void sub_00028A11(void){}
+void sub_0001B237(void){abort();}
 void sub_0002B588(void){++menu_events;last_menu_key=(int)WORD(g_esp+4);g_esp+=4;}
 VOID __stdcall xbox_HalReturnToFirmware(ULONG routine){CHECK(routine==2);++quits;}
 void xbox_KbmSetMenuMode(int on){(void)on;}
@@ -206,6 +208,11 @@ int main(void)
         down[VK_SPACE]=1;pc_controls_movie_frame();CHECK(start_pulses==before_pulses+1); /* no video, no skip */
         down[VK_SPACE]=0;down[VK_DOWN]=0;
     }
+    /* B on the pause menu resumes play but leaves ACTIVE_MENU on the Difficulty
+     * page: only a menu the renderer still draws counts as shown. */
+    WORD(ACTIVE_MENU)=0x46C9B0;pc_controls_menu_drawn();CHECK(shown_menu()==0x46C9B0);
+    menu_draw_ms-=1000;CHECK(shown_menu()==0);
+    menu_draw_seen=0;WORD(ACTIVE_MENU)=0;
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }

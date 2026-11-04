@@ -7,6 +7,7 @@ void pc_controls_build_menu(void) {}
 void pc_controls_options_layout(void) {}
 void pc_controls_frame(void) {++pc_frame_calls;}
 void pc_controls_movie_frame(void) {}
+void pc_controls_menu_drawn(void) {}
 int pc_controls_input_begin(uint32_t profile) {(void)profile;return 0;}
 void pc_controls_input_end(void) {}
 void (*pc_controls_dispatch(uint32_t address))(void) {(void)address;return 0;}

@@ -1388,3 +1388,37 @@ fills the width with geometry at the edges, the enemy and revolver keep their
 proportions, the HUD, pause menu and its outline sit in the middle 4:3. The
 front end stays 4:3 (pillarboxed). About 180-250 fps in the first scene. Only
 the first level has been looked at.
+
+## 2026-11-04 (later): mouse in menus, reachable BACK, PC page animations
+
+- **Mouse in Sam's menus** (`native_mouse_frame` in `pc_controls.c`), with
+  Turok's mapping. A page's buttons are a list from page `+0x04` through each
+  button's node at `+0x08`; `+0x7C` marks the focused one, and the page's own
+  OnKeyDown (`0x0002AC71`) moves focus with KillFocus (`+0x10`) / SetFocus
+  (`+0x0C`). Hit boxes are the game's own: `sub_0001B237` (top left, with the
+  alignment at `+0x6C` (0 centred, 1 right) and `+0x70`), vtable `+0x20` (text
+  size), plus the page offset at page `+0x24/+0x28`. The main menu's page
+  offset is why its text sits ~30 units below its anchors. Estimating from
+  anchors missed the pause menu by 12 units. Verified on the main menu,
+  Options (slider wheel, choice click, right-click previous value), the PC
+  pages and the pause menu.
+- **Field names corrected:** `+0x6C` is horizontal alignment (was
+  `GADGET_6C`), `+0x8C` the entrance transition type (was mislabelled as
+  alignment).
+- **BACK reachable** on PC Controls and PC Settings: it is the stop after the
+  last row for up/down.
+- **PC pages slide in** like Options: rows alternate transition types 2/3 on
+  open (label and value together). The menu-change clock is global
+  (`0x470188`/`0x470190`, `sub_00029396`); the Controls page now only
+  repositions rows whose resting place changed, so the slide is not reset each
+  frame.
+- **Pause menu Back:** B on the pause menu resumes play but leaves ACTIVE_MENU
+  on the Difficulty page (`0x0046C9B0`), with neither vblank wait nor the menu
+  renderer called afterwards. `shown_menu()` counts a menu as shown only while
+  the renderer (`sub_0002B6BE`) keeps drawing it, and the widescreen policy
+  also runs from the action builder (every game tick). Before this, play after
+  pause-Back stayed 4:3 and the PC controls stayed in menu mode. Clearing the
+  pause page's parent did not help: B is handled by the pause page itself, not
+  MenuBack.
+- Pages opened from the pause menu (Options and so on) are full-screen 4:3
+  pages and stay 4:3; only play and the pause overlay are widescreen.

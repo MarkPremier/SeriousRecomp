@@ -260,6 +260,24 @@ Raw mouse counts enter Sam's normal action builder, independently of frame time
 and console sensitivity/invert. `RECOMP_KBM=0` disables PC gameplay input.
 Tests can set `RECOMP_PC_CONTROLS_FILE=<private ini>` to isolate preferences.
 
+### Mouse in menus
+
+In any menu (the front end and the pause menu) the mouse works as a pointer:
+
+| Mouse | In a menu |
+|-------|-----------|
+| Move over an entry | focuses it |
+| Left click | chooses it; on an option row (slider or choice), the next value |
+| Right click | on an option row, the previous value; elsewhere Back |
+| Wheel | over an option row, its value; elsewhere up / down |
+
+Entries are found and focused the way Sam's own menus do it: each button's
+rectangle comes from its own size and alignment code (`sub_0001B237`, vtable
+`+0x20`) plus its page's offset, and focus moves through its KillFocus and
+SetFocus. `RECOMP_MENU_MOUSE_TRACE=1` logs every click with the boxes it
+tested, and every change of the active menu. On the PC Controls and PC
+Settings pages, BACK is the stop after the last row for keys and pads too.
+
 ## PC settings
 
 **Options > PC Settings** is available from both the main and pause menus.

@@ -7,6 +7,8 @@ void pc_controls_load(void);
 void pc_controls_build_menu(void);
 void pc_controls_options_layout(void);
 void pc_controls_frame(void);
+/* Sam's menu renderer drew a menu this frame (which menu is shown; see pc_controls.c). */
+void pc_controls_menu_drawn(void);
 /* Keyboard/mouse movie skipping only (normally from its own thread); any thread. */
 void pc_controls_movie_frame(void);
 int pc_controls_input_begin(uint32_t profile);

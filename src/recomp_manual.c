@@ -73,6 +73,7 @@ void sub_00070810(void)
  * menu input/capture at the menu renderer itself as well as the presenters. */
 void sub_0002B6BE(void)
 {
+    pc_controls_menu_drawn();
     pc_controls_frame();
     sub_0002B6BE_gen();
 }
