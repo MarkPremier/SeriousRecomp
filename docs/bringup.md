@@ -1422,3 +1422,83 @@ the first level has been looked at.
   MenuBack.
 - Pages opened from the pause menu (Options and so on) are full-screen 4:3
   pages and stay 4:3; only play and the pause overlay are widescreen.
+
+## 2026-11-04: repeating audio corruption (Codex follow-up to Claude)
+
+Read Claude's latest title commits through `69cf3cf` and toolkit through
+`f755258`, including the menu mouse, movie skipping and widescreen changes.
+Preserved the existing uncommitted mouse diagnostic in `src/pc_controls.c`.
+The new audio fix does not change those features or any Turok tree.
+
+### Cause and correction
+
+The constant loudness in `analysis/audio3.mix.raw` alone did not establish a
+stuck voice. Comparing the raw DSP output in Claude's three recordings showed
+nearly the same repeating signal in audio1/audio2 (without keyboard skips) and
+audio3 (both movies skipped). At 60 seconds the latter's left-channel raw DSP
+RMS was 6668, with correlation 0.9984 at a 19203-sample lag (~0.4 seconds;
+the underlying loop is ~0.2 seconds). The output declick filter obscured some
+of that pattern; this is why `.emu.raw` is useful alongside `.mix.raw`.
+
+The voice trace isolated v68: stereo 16-bit PCM, pitch -501 (~44.1 kHz),
+EBO 8820, sample base resolving to physical `0x0121B564`. In the baseline it
+read host memory corresponding to guest `0x8121B564`, beginning `3F1F4E44`.
+A live read of both banks showed varying, plausible stereo PCM in ordinary
+RAM and unrelated floating-point values in that contiguous bank. The APU's
+live-contiguous-block redirect was overriding the sample buffer's ordinary
+DMA provenance. This is not evidence of a movie voice being left running.
+
+Sam now defaults `RECOMP_APU_NO_REDIR=1`, the existing mode Turok uses for the
+same ordinary-RAM music-buffer collision. Sample data follows DMA provenance;
+the separate `mcpx_apu_ds_address` and `xbox_ApuScratchPointer` resolvers still
+pin voice/SGE/notifier structures and DSP scratch to their live contiguous
+blocks. The toolkit parser also honours `RECOMP_APU_NO_REDIR=0` instead of
+mistaking the variable's presence for a true value. The toolkit-wide default
+is unchanged; this title selects its own policy before APU initialization.
+Toolkit change and synthetic regressions are committed as `912f507` on the
+isolated `serious-sam` branch; nothing was pushed.
+
+### Verification and limits
+
+- Reproduced with private fresh saves in `analysis/audio_codex_baseline`.
+  The same executable with only the existing no-redirect mode selected
+  (`analysis/audio_codex_noredir`) read the PCM bank and lost the repeating
+  pattern. At 60 seconds, raw RMS dropped from 6419 to 524 and the measured
+  repeat correlation from 0.9984 to 0.0392. These are signal diagnostics, not
+  subjective listening tests or a rule for detecting all audio bugs.
+- Rebuilt the Release executable. `analysis/audio_fixed_skip` launches that
+  executable without GAME_DIR or audio-policy overrides, discovers test_clean,
+  uses private saves/settings, skips both movies using Enter, and reaches
+  Hatshepsut. Runtime framebuffer exports at 50/100/125 seconds verify gameplay,
+  movement and firing. At raw-audio second 60, RMS is 532 and the old repeat
+  correlation is 0.0384. No crash or contained APU fault was logged in 125
+  seconds. All files in the disc archives remain untouched.
+- `analysis/audio_fixed_noskip` used copied user graphics settings (120 fps,
+  21:9, 4x MSAA, with a private windowed setting). Despite the script requesting
+  no skips, one physical keyboard/mouse skip was logged; do not report that
+  run as two uninterrupted movies. It reached gameplay with no crash or APU
+  fault, and no repeating corruption. A separate `audio_fixed_fullmovies` run
+  disables PC keyboard/mouse input to exclude physical skips while retaining
+  the runtime capture key and scripted Xbox input. That 120-second run logs
+  zero skips, crashes or contained APU faults. Captures show the Croteam movie
+  at 20 seconds, Main at 43 and Hatshepsut at 120. Its 60-second raw-audio
+  sample has RMS 1432 and repeat correlation 0.0074.
+- Seven title CTests pass. The new `memory_regressions_apu_redir` and
+  `_apu_no_redir` cases run the actual memory/APU readers against different
+  bytes at the same physical offset in both banks. They verify numeric 0/1,
+  explicit contiguous addresses, pinned DS data and pinned scratch. Both pass,
+  along with default, heap-reclaim and ext-vma-128. The broader suite's existing
+  `ext-vma` case expects a 64 MB map but gets the current 128 MB default and
+  fails its unrelated high-address assertions. No VMA behavior was changed.
+- Windows Computer Use still fails to connect to its native pipe (os error 2).
+  Images above are runtime framebuffer exports, not OS window screenshots.
+- Audio pacing is still open: the diagnostic post-fix probes drain the XAudio2
+  queue repeatedly and produce less PCM time than wall time. Engine glitch
+  counters stay zero, which does not establish absence of underruns. The bank
+  correction fixes repeating corrupt samples, not every source of stutter.
+  Historical DirectSound cleanup and firing/allocator crashes remain open;
+  these short runs do not establish extended stability.
+
+Installed Release SHA-256:
+`76629C816FFA76DF79046322345400661DB66D374E59357FD478A332780FA741`.
+Original saves, original PC settings and all Turok projects are untouched.

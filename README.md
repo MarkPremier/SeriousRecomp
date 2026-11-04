@@ -10,6 +10,13 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- Audio buffer correction (2026-11-04): normal launches now keep sample DMA
+  provenance, as Turok does. Sam's ordinary-RAM PCM stream collided numerically
+  with a contiguous graphics allocation; redirecting it played graphics data
+  as a repeating buzz. Private recordings confirm the repeating signal is gone
+  through first-level movement and firing. Audio pacing still needs work:
+  diagnostic runs can drain the output queue. See [bring-up notes](docs/bringup.md).
+
 - Lightmap correction (2026-11-04): rotate instructions now publish their carry
   flag, allowing Sam's shadow-mask mixers to advance between bytes. The prior
   code repeated the first mask byte, losing patterned shadows and leaving

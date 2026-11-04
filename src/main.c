@@ -412,6 +412,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         _putenv_s("RECOMP_PB_EXEC", "1");
     if (!getenv("RECOMP_AC97_READY"))
         _putenv_s("RECOMP_AC97_READY", "1");
+    /* Sam's PCM stream buffers live in ordinary RAM. A graphics allocation
+     * can own the same physical page number in the separate contiguous bank;
+     * redirecting samples there plays graphics data as a repeating buzz.
+     * Keep sample DMA provenance; DS structures and DSP scratch stay pinned
+     * to their contiguous allocations by the runtime's dedicated resolvers. */
+    if (!getenv("RECOMP_APU_NO_REDIR"))
+        _putenv_s("RECOMP_APU_NO_REDIR", "1");
     if (!getenv("RECOMP_FB_WINDOW"))
         _putenv_s("RECOMP_FB_WINDOW", "1");
     /* XDK's multimedia timer worker builds KEVENT headers directly. */

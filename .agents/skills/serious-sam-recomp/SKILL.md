@@ -16,6 +16,22 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-04)
 
+- **Audio buzz (Codex, 2026-11-04):** Sam now defaults
+  `RECOMP_APU_NO_REDIR=1`, matching Turok's sample-DMA policy. Voice 68's
+  ordinary-RAM streaming PCM at `0x0121B564` was redirected to unrelated floats
+  at `0x8121B564` in a live graphics allocation. It repeated every ~0.2 seconds.
+  This also occurs without keyboard movie skips; do not blame XMV cleanup.
+  DirectSound voice/SGE/notifier structures and DSP scratch remain pinned to
+  contiguous memory through their dedicated resolvers. The runtime now honours
+  numeric `RECOMP_APU_NO_REDIR=0`; two synthetic memory regressions cover both
+  sample policies and preserved DS/scratch routing. New Release hash starts
+  `76629C81`; normal-discovery recordings/captures are in
+  `analysis/audio_fixed_skip` and `analysis/audio_fixed_fullmovies`.
+  The repeating corruption is corrected, not all audio quality: diagnostic
+  runs still show queue starvation. No claim that the historical DS cleanup
+  or firing crashes are fixed. Claude's uncommitted mouse diagnostics in
+  `src/pc_controls.c` were preserved. See the latest bring-up section.
+
 - **Latest (Claude Code, 2026-11-04):** Hor+ widescreen/ultrawide (PC Settings
   "Aspect ratio", default Auto; front end stays 4:3), keyboard/mouse movie
   skipping, PC controls confined to the main thread, bounded occlusion waits,
