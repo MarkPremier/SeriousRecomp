@@ -1593,3 +1593,20 @@ isolated test process was closed after the check. Original saves/settings,
 Claude's pending diagnostic block and all Turok trees remain untouched.
 Installed Release SHA-256:
 `CF8B8103D9B2DC1C29BD5C56C91381F18DD0C390F4BEAE8DD23237161CF6BC4A`.
+
+## 2026-11-04 (evening): widescreen model detail, briefing skip
+
+- **Palms invisible / ghostly in widescreen.** `Prepare` (`sub_001D1C00`) also
+  caches `ppr_fMipRatio` at `+0x188` (`width / (x ratio +0x18C * 640)`, the
+  value `MipFactor` uses for every model's LOD and distance fade). From the
+  widened x ratio it came out `wide` times too large, so at 21:9 models were
+  treated as 1.8x further away: palms dropped to trunkless LODs and faded out
+  close up. The wrapper now restores the 4:3 figure after the call (only when
+  the main branch wrote it this call). Hor+ keeps the vertical scale, so
+  detail should follow it.
+- **KB/M skip of the post-load NETRICSA briefing** ("Please press START to
+  continue"): its preview is a boxed video, not a full-screen one, so the
+  movie skip ignored it. The skip now also fires on any screen with no menu
+  and no 3D for two flips (toolkit `nv2a_gpu_frames_without_3d`); play always
+  has 3D, so Enter/Space/click keep their in-game meaning. Verified: Enter at
+  the briefing started play.

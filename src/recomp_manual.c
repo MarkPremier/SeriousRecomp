@@ -109,6 +109,8 @@ void sub_0002A089(void)
 #define PROJECTION_SCREEN_MIN 0x54u
 #define PROJECTION_SCREEN_MAX 0x5Cu
 #define PROJECTION_FOV        0x184u
+#define PROJECTION_MIP_RATIO  0x188u
+#define PROJECTION_X_RATIO    0x18Cu
 #define GUESTF(va) (*(float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 void sub_001D1C00(void)
 {
@@ -127,6 +129,15 @@ void sub_001D1C00(void)
     sub_001D1C00_gen();
     GUESTF(self + PROJECTION_FOV) = fov;
     GUESTF(self + PROJECTION_ASPECT) = aspect;
+    /* Prepare also caches the mip ratio (+0x188, width / (x ratio * 640)) that
+     * picks every model's level of detail and distance fade. From the widened
+     * x ratio it came out `wide` times too large, as if everything were that
+     * much further away: palms dropped their trunks and faded out close up.
+     * Hor+ keeps the vertical scale, so detail keeps the 4:3 figure. Only the
+     * main branch writes it; check it is this call's value before scaling. */
+    float ratio = GUESTF(self + PROJECTION_X_RATIO), mip = GUESTF(self + PROJECTION_MIP_RATIO);
+    if (ratio != 0.0f && fabsf(mip * ratio * 640.0f - width) <= fabsf(width) * 1e-4f)
+        GUESTF(self + PROJECTION_MIP_RATIO) = mip / wide;
 }
 
 /* XDK 4928's idle-voice notifier looks up the owner at DirectSound +0x328.

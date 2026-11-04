@@ -62,6 +62,8 @@ int xbox_KbmMenuWheel(void){int n=wheel;wheel=0;return n;}
 static int video_active;
 static DWORD WINAPI frame_on_worker(LPVOID unused){(void)unused;pc_controls_frame();pc_controls_movie_frame();return 0;}
 int xbox_VideoActive(void){return video_active;}
+static int frames_2d;
+int nv2a_gpu_frames_without_3d(void){return frames_2d;}
 static float wide_set=1;
 void nv2a_gpu_set_wide_factor(float factor){wide_set=factor;}
 void nv2a_gpu_set_wide_title_fov(int on){(void)on;}
@@ -303,7 +305,16 @@ int main(void)
         CHECK(start_pulses==before_pulses+1); /* held, not pressed again */
         down[VK_RETURN]=0;video_active=0;pc_controls_movie_frame();
         down[VK_SPACE]=1;pc_controls_movie_frame();CHECK(start_pulses==before_pulses+1); /* no video, no skip */
-        down[VK_SPACE]=0;down[VK_DOWN]=0;
+        down[VK_SPACE]=0;down[VK_DOWN]=0;pc_controls_movie_frame();
+        /* The post-load briefing: no menu, no 3D, no full-screen video. */
+        WORD(ACTIVE_MENU)=0;frames_2d=5;down[VK_RETURN]=1;pc_controls_movie_frame();
+        CHECK(start_pulses==before_pulses+2);
+        down[VK_RETURN]=0;pc_controls_movie_frame();
+        frames_2d=0;down[VK_RETURN]=1;pc_controls_movie_frame();CHECK(start_pulses==before_pulses+2); /* in play */
+        down[VK_RETURN]=0;pc_controls_movie_frame();
+        WORD(ACTIVE_MENU)=page;frames_2d=5;down[VK_RETURN]=1;pc_controls_movie_frame();
+        CHECK(start_pulses==before_pulses+2); /* a menu takes Enter itself */
+        down[VK_RETURN]=0;pc_controls_movie_frame();frames_2d=0;
     }
     /* B on the pause menu resumes play but leaves ACTIVE_MENU on the Difficulty
      * page: only a menu the renderer still draws counts as shown. */

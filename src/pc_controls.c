@@ -22,7 +22,7 @@ extern void xbox_KbmSetMenuMode(int on), xbox_KbmSetRawMouse(int on), xbox_KbmSe
 extern void xbox_KbmSetBinding(const char *target, const int *keys, int count);
 extern void xbox_KbmPulse(const char *target, int ms);
 extern int xbox_KbmInputDown(int key), xbox_KbmMenuWheel(void);
-extern int xbox_VideoActive(void);
+extern int xbox_VideoActive(void), nv2a_gpu_frames_without_3d(void);
 extern void nv2a_gpu_set_wide_factor(float factor), nv2a_gpu_set_wide_title_fov(int on);
 extern int xbox_FramebufferKeyDown(int key), xbox_FramebufferMouseButton(int button);
 extern int xbox_FramebufferMouseClicks(int button), xbox_FramebufferMouseDelta(int *dx, int *dy);
@@ -722,11 +722,15 @@ static void keyboard_frame(void)
     }
 }
 
-/* Escape, Enter, Space or a left click skips a movie, as Start does on a pad.
- * The boot movies play on their own worker while the main thread loads, and
- * do not reliably pass through any presenter this file hooks, so a small
- * thread of its own watches for the press (movie_thread). It only reads key
- * state and pulses the virtual pad, both safe from any thread. */
+/* Escape, Enter, Space or a left click skips a movie, as Start does on a pad,
+ * and passes the "Please press START to continue" briefing that follows the
+ * level load (NETRICSA, with its preview in a small box, so not a full-screen
+ * video). Both are screens with no menu and no 3D world; in play there is
+ * always 3D, so those keys keep their meaning there. The boot movies play on
+ * their own worker while the main thread loads, and do not reliably pass
+ * through any presenter this file hooks, so a small thread of its own watches
+ * for the press (movie_thread). It only reads key and screen state and pulses
+ * the virtual pad, all safe from any thread. */
 void pc_controls_movie_frame(void)
 {
     static const int skip_keys[] = {VK_ESCAPE, VK_RETURN, VK_SPACE, MOUSE1};
@@ -735,7 +739,8 @@ void pc_controls_movie_frame(void)
     if (!enabled) return;
     for (int i = 0; i < (int)(sizeof skip_keys / sizeof skip_keys[0]); ++i)
         if (physical_down(skip_keys[i])) down = 1;
-    if (InterlockedExchange(&held, down) || !down || !xbox_VideoActive()) return;
+    if (InterlockedExchange(&held, down) || !down) return;
+    if (!xbox_VideoActive() && (shown_menu() || nv2a_gpu_frames_without_3d() < 2)) return;
     xbox_KbmPulse("START", 150);
     fprintf(stderr, "[PC CONTROLS] movie skipped from the keyboard/mouse\n");
 }
