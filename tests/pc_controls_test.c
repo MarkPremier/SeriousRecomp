@@ -9,23 +9,47 @@ ptrdiff_t g_xbox_mem_offset;
 RECOMP_TLS double g_fp_stack[8];
 RECOMP_TLS int g_fp_top;
 RECOMP_TLS uint16_t g_fp_control_word=0x27F;
+void sub_0001ACF9(void);
+void sub_0001AD5E(void);
 #include "sam_menu_animation.inc"
-recomp_func_t recomp_lookup(uint32_t va){fprintf(stderr,"Unexpected animation tail %08X\n",va);abort();}
+static void test_text_size(void);
+static void test_focus(void);
+static void test_unfocus(void);
+static void test_gadget_key(void);
+recomp_func_t recomp_lookup(uint32_t va){
+    switch(va){
+    case 0x1C953:return sub_0001C953;
+    case 0x100010:return test_text_size;
+    case 0x100020:return test_focus;
+    case 0x100030:return test_unfocus;
+    case 0x100040:return test_gadget_key;
+    }
+    fprintf(stderr,"Unexpected menu call %08X\n",va);abort();
+}
 recomp_func_t recomp_lookup_manual(uint32_t va){return recomp_lookup(va);}
 recomp_func_t recomp_lookup_kernel(uint32_t va){return recomp_lookup(va);}
 void recomp_icall_fail_log(uint32_t va){(void)va;abort();}
+void recomp_icall_not_code_log(uint32_t va){(void)va;abort();}
+uint32_t g_xbox_code_lo=0x10000,g_xbox_code_hi=0x3A9840;
+volatile uint32_t g_icall_trace[ICALL_TRACE_SIZE],g_icall_trace_idx;
+volatile uint64_t g_icall_count;
 static int down[0x108], mouse_dx,mouse_dy,raw_mouse,capture;
 static int clicks[5], wheel, pointer_on, px,py,pw,ph,backs;
 static int menu_events,last_menu_key,start_pulses;
-static int quits;
+static int quits, sounds;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1);}}while(0)
-uint32_t xbox_HeapAlloc(uint32_t size,uint32_t alignment){(void)size;(void)alignment;abort();}
+uint32_t xbox_HeapAlloc(uint32_t size,uint32_t alignment){CHECK(size==16 && alignment==16);return 0x680000;}
 void sub_0002F12B(void){abort();}
 void sub_0002727C(void){abort();}
 void sub_0002A807(void){abort();}
 void sub_0002B52A(void){++backs;g_esp+=4;}
-void sub_00028A11(void){}
-void sub_0001B237(void){abort();}
+void sub_00028A11(void){++sounds;g_eax=123;g_ecx=456;g_edx=789;g_esp+=4;}
+void sub_0001ACF9(void){g_fp_top=(g_fp_top+7)&7;g_fp_stack[g_fp_top]=FLOAT(g_ecx+GADGET_X);g_esp+=4;}
+void sub_0001AD5E(void){g_fp_top=(g_fp_top+7)&7;g_fp_stack[g_fp_top]=FLOAT(g_ecx+GADGET_Y);g_esp+=4;}
+static void test_text_size(void){FLOAT(WORD(g_esp+4))=220;FLOAT(WORD(g_esp+8))=30;g_esp+=16;}
+static void test_focus(void){WORD(g_ecx+GADGET_FOCUSED)=1;g_esp+=4;}
+static void test_unfocus(void){WORD(g_ecx+GADGET_FOCUSED)=0;g_esp+=4;}
+static void test_gadget_key(void){g_eax=0;g_esp+=8;}
 void sub_0002B588(void){++menu_events;last_menu_key=(int)WORD(g_esp+4);g_esp+=4;}
 VOID __stdcall xbox_HalReturnToFirmware(ULONG routine){CHECK(routine==2);++quits;}
 void xbox_KbmSetMenuMode(int on){(void)on;}
@@ -85,6 +109,72 @@ static void options_animation_test(void)
         CHECK(WORD(order[0]+0x9C)==settings_entry && WORD(settings_entry+0xA0)==order[0]);
     }
     entry=settings_entry=0;
+}
+
+static void native_mouse_test(void)
+{
+    const uint32_t menu=0x660000, row=0x661000, next=0x661200, texture=0x665000;
+    const uint32_t footer[]={0x662000,0x662200,0x662400,0x662600};
+    const int anchors[]={49,152,302,430}, icons[]={65,168,447,575}, labels[]={100,240,350,520};
+    const char letters[]={'B','Y','X','A'};
+    const int events[]={VK_ESCAPE,0xAF0,0xA8C,VK_RETURN};
+    uint32_t gadgets[]={row,next,footer[0],footer[1],footer[2],footer[3]};
+    WORD(0x3A9D98)=0x40000000; /* native alignment divisor: 2 */
+    WORD(0x4702B8)=texture;WORD(texture+0x20)=WORD(texture+0x24)=32;WORD(texture+0x28)=0;
+    WORD(0x670000+VTABLE_TEXT_SIZE)=0x100010;
+    WORD(0x670000+VTABLE_SET_FOCUS)=0x100020;
+    WORD(0x670000+VTABLE_KILL_FOCUS)=0x100030;
+    WORD(0x670000+VTABLE_GADGET_KEY)=0x100040;
+    WORD(SHORTCUT_VTABLE+VTABLE_TEXT_SIZE)=0x1C953;
+    WORD(menu+SCREEN_GADGETS)=row+GADGET_NODE;
+    /* Actual Select Player anchors and controller keys. The page offset is
+     * deliberately nonzero: footer rendering ignores it, text rows do not. */
+    FLOAT(menu+SCREEN_OFFSET_X)=10;FLOAT(menu+SCREEN_OFFSET_Y)=20;
+    for(unsigned i=0;i<6;++i){
+        uint32_t g=gadgets[i];
+        WORD(g+GADGET_NODE)=i<5?gadgets[i+1]+GADGET_NODE:0x66F000;
+        WORD(g+GADGET_VISIBLE)=WORD(g+GADGET_ENABLED)=1;
+        WORD(g+GADGET_CENTRED)=WORD(g+0x70)=0xFFFFFFFFu;
+        WORD(g+GADGET_SCREEN)=menu;
+        WORD(g)=i<2?0x670000:SHORTCUT_VTABLE;
+        FLOAT(g+GADGET_X)=i<2?100:(float)anchors[i-2];
+        FLOAT(g+GADGET_Y)=i<2?100+50.0f*i:412;
+    }
+    for(int i=0;i<4;++i){WORD(footer[i]+SHORTCUT_BUTTON)=letters[i];WORD(footer[i]+0xB4)=128;WORD(footer[i]+SHORTCUT_ICON_LEFT)=i<2;}
+    WORD(row+GADGET_FOCUSED)=1;WORD(row+GADGET_DOWN)=next;WORD(next+GADGET_UP)=row;
+    WORD(ACTIVE_MENU)=menu;page=settings_page=quit_page=0;capturing=-1;menu_draw_seen=0;
+    pointer_on=1;pw=640;ph=480;g_esp=0x70000;
+    uint32_t found[MAX_MENU_GADGETS], focused;
+    CHECK(menu_buttons(menu,found,&focused)==2 && focused==row);
+    CHECK(menu_shortcuts(menu,found)==4);
+    int before=sounds;
+    uint32_t saved_regs[]={g_eax,g_ecx,g_edx,g_ebx,g_esi,g_edi,g_ebp,g_seh_ebp};
+    px=200;py=180;native_mouse_frame();
+    CHECK(WORD(next+GADGET_FOCUSED) && !WORD(row+GADGET_FOCUSED) && sounds==before+1);
+    CHECK(g_eax==saved_regs[0] && g_ecx==saved_regs[1] && g_edx==saved_regs[2] &&
+          g_ebx==saved_regs[3] && g_esi==saved_regs[4] && g_edi==saved_regs[5] &&
+          g_ebp==saved_regs[6] && g_seh_ebp==saved_regs[7]);
+    ++px;native_mouse_frame();CHECK(sounds==before+1); /* motion within a row is silent */
+    for(int i=0;i<4;++i){
+        px=icons[i];py=430;before=sounds;native_mouse_frame();CHECK(sounds==before+1);
+        CHECK(WORD(next+GADGET_FOCUSED)); /* shortcut hover retains the selected profile */
+        int previous_events=menu_events;
+        clicks[0]=1;native_mouse_frame();CHECK(menu_events==previous_events+1 && last_menu_key==events[i]);
+        CHECK(sounds==before+1); /* no repeat while held over the same shortcut */
+        px=labels[i];clicks[0]=1;native_mouse_frame();CHECK(menu_events==previous_events+2 && last_menu_key==events[i]);
+        CHECK(g_esp==0x70000 && g_fp_top==0);
+    }
+    /* Same geometry in pillarboxed and letterboxed windows. */
+    pw=1600;ph=900;px=1175;py=806;clicks[0]=1;native_mouse_frame();CHECK(last_menu_key==VK_RETURN);
+    pw=600;ph=900;px=94;py=628;clicks[0]=1;native_mouse_frame();CHECK(last_menu_key==VK_ESCAPE);
+    pw=640;ph=480;px=350;py=430;
+    WORD(footer[2]+GADGET_ENABLED)=0;CHECK(menu_shortcuts(menu,found)==3);
+    before=menu_events;clicks[0]=1;native_mouse_frame();CHECK(menu_events==before);
+    WORD(footer[1]+GADGET_VISIBLE)=0;CHECK(menu_shortcuts(menu,found)==2);
+    WORD(row+GADGET_ENABLED)=0;
+    CHECK(menu_buttons(menu,found,&focused)==2); /* disabled rows must not sever the navigation graph */
+    px=20;py=430;clicks[0]=1;native_mouse_frame();CHECK(menu_events==before); /* outside all buttons */
+    WORD(menu+SCREEN_GADGETS)=0;WORD(ACTIVE_MENU)=0;pointer_on=0;
 }
 
 int main(void)
@@ -159,7 +249,9 @@ int main(void)
     clicks[3]=1;pc_controls_frame();CHECK(capturing==-1 && keys[FORWARD]==MOUSE4 && !capture);
     down[VK_DELETE]=1;pc_controls_frame();CHECK(keys[FORWARD]==0);
     down[VK_DELETE]=0;pc_controls_frame();
-    px=200;py=646;pc_controls_frame();CHECK(selected==FIRE);
+    int before_sound=sounds;
+    px=200;py=646;pc_controls_frame();CHECK(selected==FIRE && sounds==before_sound+1);
+    ++px;pc_controls_frame();CHECK(sounds==before_sound+1);
     pw=1600;ph=900;px=400;py=313;pc_controls_frame();CHECK(selected==FORWARD);
     pw=600;ph=900;px=100;py=381;pc_controls_frame();CHECK(selected==FORWARD);
     g_esp=0x30000;WORD(g_esp+4)=VK_DOWN;g_ebx=44;g_esi=45;g_edi=46;
@@ -213,6 +305,7 @@ int main(void)
     WORD(ACTIVE_MENU)=0x46C9B0;pc_controls_menu_drawn();CHECK(shown_menu()==0x46C9B0);
     menu_draw_ms-=1000;CHECK(shown_menu()==0);
     menu_draw_seen=0;WORD(ACTIVE_MENU)=0;
+    native_mouse_test();
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }

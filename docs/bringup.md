@@ -1502,3 +1502,57 @@ isolated `serious-sam` branch; nothing was pushed.
 Installed Release SHA-256:
 `76629C816FFA76DF79046322345400661DB66D374E59357FD478A332780FA741`.
 Original saves, original PC settings and all Turok projects are untouched.
+
+## 2026-11-04: clickable menu footers and mouse highlight sound
+
+The Select Player page has only one gadget in its focus-navigation graph:
+the profile selector. Its bottom row is a separate gadget class (`0x3A9F34`),
+with no navigation links. The old mouse code deliberately excluded such hints,
+so neither the text nor the B/Y/X/A icons could be clicked.
+
+The mouse now enumerates visible, enabled shortcut gadgets separately and maps
+their native ASCII button field (`+0xB0`) to the page's existing key handler:
+A = Enter, B = Escape, X = `0xA8C`, Y = `0xAF0`. This keeps the current profile
+selected while invoking Select, Back, Delete Player or New Player through the
+same code as the controller. It does not bypass the game's deletion confirmation.
+This also covers the same footer class on other menus, including Options.
+
+Footer geometry differs from text rows. Its renderer (`0x1C999`) uses animated
+anchors without adding the page offset. It also places icons on either side
+(`+0xC0`) and overlaps the background bars. Hit regions use the native corner
+and size helpers, omit the page offset, and trim adjacent bar overlaps so an
+icon or label does not activate its neighbour. Disabled rows remain traversable
+in the navigation graph but cannot be clicked; excluding them during traversal
+could disconnect other rows.
+
+Mouse focus changes previously called KillFocus/SetFocus without the handled-key
+sound that `sub_0002B588` plays. Mouse hover now plays `0x47013C` through the same
+`sub_00028A11` sound helper, once when entering a new row/shortcut. The PC Controls,
+PC Settings and Quit pages also play it when pointer selection changes. Moving
+inside an already selected row does not replay it.
+
+Verification: all seven title CTests pass. The controls test now extracts the
+actual generated `1B237`, `1C953` and texture-size helpers in addition to the
+existing animation setters. A fixture based on live Select Player objects
+(`analysis/menu_footer_baseline/profile_objects.txt`) checks every icon and label,
+all four action keys, preserved selected-profile focus, a nonzero page offset,
+pillarboxed and letterboxed windows, hidden/disabled shortcuts, guest registers,
+stack and FPU balance, and sounds occurring once per new hover target. The
+original page was also verified in a runtime framebuffer export at
+`analysis/menu_footer_baseline/frame.bmp` before changing the code.
+
+Native Windows input/capture remains unavailable: `cua.getState()` failed to
+initialize with os error 3. Do not describe these fixtures or framebuffer exports
+as a physical mouse/OS-window test. Physical pointer feel and sound need the
+user's confirmation on the rebuilt executable. The prior audio-buffer correction
+is included; audio queue starvation and historical crashes remain separate open
+issues. Turok trees and original saves/settings are untouched. Claude's existing
+uncommitted menu diagnostic block is preserved separately from this change.
+
+The final executable was launched with normal game-file discovery (no GAME_DIR
+override), a sparse private save copy and private PC settings. It found
+`test_clean` and reached Select Player; the runtime export
+`analysis/menu_footer_after/frame.bmp` shows the same page and all four footer
+actions. This verifies startup/page rendering, not physical mouse clicks.
+The test process was stopped after capture. Installed Release SHA-256:
+`097F9A1C9AF38B3054F77A3A68FF92ACE01B9E6CF6BADB756A7C48CA481E91EC`.

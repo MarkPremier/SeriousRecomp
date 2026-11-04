@@ -16,6 +16,22 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-04)
 
+- **Mouse footer and hover sounds (Codex):** `0x3A9F34` gadgets are A/B/X/Y
+  shortcuts, separate from the focus-navigation graph. Their ASCII button at
+  `+0xB0` maps to native menu keys Enter/Escape/`0xA8C`/`0xAF0`; keep the
+  selected profile focused. Footer renderer `0x1C999` does not add page
+  offsets; adjacent bars overlap, so hit boxes trim toward the adjacent label
+  while retaining the controller icons (`+0xC0` = icon on left). Mouse focus
+  changes call the same sound as native keys (`0x47013C`, via `0x28A11`), also
+  on PC pages. Do not replay the sound every frame over the same item.
+  Seven tests pass, with actual generated `1B237`/`1C953` geometry helpers,
+  icon/label clicks, screen-aspect mapping, hidden/disabled actions, preserved
+  profile focus and guest register/FPU balance. Native OS mouse verification
+  remains unavailable: Computer Use cannot initialize (os error 3).
+  Normal-discovery launch reached Select Player using private saves/settings;
+  runtime export is `analysis/menu_footer_after/frame.bmp`. Installed Release
+  SHA-256: `097F9A1C9AF38B3054F77A3A68FF92ACE01B9E6CF6BADB756A7C48CA481E91EC`.
+
 - **Audio buzz (Codex, 2026-11-04):** Sam now defaults
   `RECOMP_APU_NO_REDIR=1`, matching Turok's sample-DMA policy. Voice 68's
   ordinary-RAM streaming PCM at `0x0121B564` was redirected to unrelated floats

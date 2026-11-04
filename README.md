@@ -10,6 +10,11 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- Mouse menus: the Select Player footer's Back, New Player, Delete Player and
+  Select actions can be clicked on either their labels or controller icons.
+  Moving between menu items now plays the game's normal selection sound,
+  including the PC pages, once per changed item.
+
 - Audio buffer correction (2026-11-04): normal launches now keep sample DMA
   provenance, as Turok does. Sam's ordinary-RAM PCM stream collided numerically
   with a contiguous graphics allocation; redirecting it played graphics data

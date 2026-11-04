@@ -79,6 +79,7 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define GADGET_TARGET_SCALE 0x34u
 #define GADGET_TEXT         0x4Cu /* char * */
 #define GADGET_CENTRED      0x6Cu /* 0 centred on GADGET_X, -1 starting there */
+#define GADGET_ENABLED      0x74u
 #define GADGET_FOCUSED      0x7Cu
 #define GADGET_VISIBLE      0x80u
 #define GADGET_TRANSITION   0x8Cu /* entrance animation type (sub_0001AFBA) */
@@ -802,6 +803,9 @@ static void wide_frame(void)
 #define VTABLE_SET_FOCUS   0x0Cu
 #define VTABLE_KILL_FOCUS  0x10u
 #define MENU_SOUND_CHANGE  0x0047013Cu /* what sub_0002B588 plays for a handled key */
+#define SHORTCUT_VTABLE    0x003A9F34u /* A/B/X/Y footer, rendered by sub_0001C999 */
+#define SHORTCUT_BUTTON    0xB0u /* ASCII controller button */
+#define SHORTCUT_ICON_LEFT 0xC0u
 #define MAX_MENU_GADGETS   64
 extern void sub_00028A11(void);
 extern void (*recomp_lookup(uint32_t va))(void);
@@ -815,6 +819,38 @@ static uint32_t virtual_call(uint32_t object, uint32_t slot, const uint32_t *arg
 {
     void (*fn)(void) = recomp_lookup(WORD(WORD(object) + slot));
     return fn ? call(fn, object, args, count) : 0;
+}
+
+static void menu_change_sound(void)
+{
+    uint32_t sound = WORD(MENU_SOUND_CHANGE);
+    call(sub_00028A11, 0, &sound, 1);
+}
+
+/* Footer hints are shortcuts, not focusable rows. Keep the selected profile
+ * (or other row) focused and send the same key the controller would send. */
+static uint32_t shortcut_key(uint32_t gadget)
+{
+    if (WORD(gadget) != SHORTCUT_VTABLE) return 0;
+    switch (WORD(gadget + SHORTCUT_BUTTON)) {
+    case 'A': return VK_RETURN;
+    case 'B': return VK_ESCAPE;
+    case 'X': return 0xA8C;
+    case 'Y': return 0xAF0;
+    default: return 0;
+    }
+}
+
+static int menu_shortcuts(uint32_t menu, uint32_t *out)
+{
+    int n = 0;
+    for (uint32_t node = WORD(menu + SCREEN_GADGETS), guard = 0; guest_object(node) && WORD(node) && guard < 256;
+         node = WORD(node), ++guard) {
+        uint32_t g = node - GADGET_NODE;
+        if (WORD(g + GADGET_VISIBLE) && WORD(g + GADGET_ENABLED) && shortcut_key(g) && n < MAX_MENU_GADGETS)
+            out[n++] = g;
+    }
+    return n;
 }
 
 /* The focusable buttons of `menu`: those linked, directly or not, to the
@@ -858,8 +894,12 @@ static void button_box(uint32_t button, const uint32_t *all, int n, float box[4]
     call(sub_0001B237, button, corner, 2);
     virtual_call(button, VTABLE_TEXT_SIZE, size, 3);
     uint32_t screen = WORD(button + GADGET_SCREEN);
-    float dx = guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_X) : 0.0f;
-    float dy = guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_Y) : 0.0f;
+    int shortcut = shortcut_key(button) != 0;
+    /* The footer renderer uses the animated anchor directly; unlike text
+     * rows it does not add the page offset. Its background bars overlap, so
+     * trim the overlap toward the adjacent label while retaining both icons. */
+    float dx = !shortcut && guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_X) : 0.0f;
+    float dy = !shortcut && guest_object(screen) ? FLOAT(screen + SCREEN_OFFSET_Y) : 0.0f;
     float y = FLOAT(button + GADGET_Y);
     int alone = 1;
     for (int i = 0; i < n; ++i)
@@ -868,6 +908,21 @@ static void button_box(uint32_t button, const uint32_t *all, int n, float box[4]
     box[1] = FLOAT(scratch + 4) + dy;
     box[2] = box[0] + FLOAT(scratch + 8);
     box[3] = box[1] + FLOAT(scratch + 12);
+    if (shortcut) {
+        for (int i = 0; i < n; ++i) {
+            uint32_t other = all[i];
+            if (other == button || !shortcut_key(other) || fabsf(FLOAT(other + GADGET_Y) - y) >= 10.0f) continue;
+            call(sub_0001B237, other, corner, 2);
+            float ox = FLOAT(scratch);
+            if (ox > FLOAT(button + GADGET_X) && WORD(button + SHORTCUT_ICON_LEFT))
+                box[2] = fminf(box[2], ox);
+            else if (ox < FLOAT(button + GADGET_X) && !WORD(other + SHORTCUT_ICON_LEFT)) {
+                virtual_call(other, VTABLE_TEXT_SIZE, size, 3);
+                box[0] = fmaxf(box[0], ox + FLOAT(scratch + 8));
+            }
+        }
+        return;
+    }
     if (alone && WORD(button + GADGET_CENTRED) == 0xFFFFFFFFu && box[2] < 620.0f) box[2] = 620.0f;
 }
 
@@ -876,9 +931,13 @@ static uint32_t button_at(const uint32_t *all, int n, float gx, float gy)
     uint32_t best = 0;
     float best_distance = 1e9f;
     for (int i = 0; i < n; ++i) {
+        if (!WORD(all[i] + GADGET_ENABLED)) continue;
         float box[4];
         button_box(all[i], all, n, box);
-        if (gx < box[0] - 6 || gx > box[2] + 6 || gy < box[1] - 3 || gy > box[3] + 3) continue;
+        int shortcut = shortcut_key(all[i]) != 0;
+        float pad = shortcut ? 0.0f : 6.0f;
+        if (gx < box[0] - pad || gx > box[2] + pad || (shortcut && gx == box[2]) ||
+            gy < box[1] - 3 || gy > box[3] + 3) continue;
         float dx = gx - (box[0] + box[2]) / 2, dy = gy - (box[1] + box[3]) / 2;
         if (dx * dx + dy * dy < best_distance) {
             best_distance = dx * dx + dy * dy;
@@ -893,8 +952,7 @@ static int button_key(uint32_t button, uint32_t key)
 {
     uint32_t args[] = {key};
     if (!virtual_call(button, VTABLE_GADGET_KEY, args, 1)) return 0;
-    uint32_t sound = WORD(MENU_SOUND_CHANGE);
-    call(sub_00028A11, 0, &sound, 1);
+    menu_change_sound();
     return 1;
 }
 
@@ -908,7 +966,9 @@ static void menu_key(uint32_t key)
 static void native_mouse_frame(void)
 {
     static int last_x = -1, last_y = -1;
+    static uint32_t hovered_shortcut;
     uint32_t menu = shown_menu(), buttons[MAX_MENU_GADGETS], focused, hit;
+    uint32_t shortcuts[MAX_MENU_GADGETS];
     int x, y, w, h, n;
     if (!menu || menu == page || menu == settings_page || menu == quit_page || capturing >= 0) return;
     int click = xbox_FramebufferMouseClicks(0), right = xbox_FramebufferMouseClicks(1);
@@ -923,7 +983,7 @@ static void native_mouse_frame(void)
     last_y = y;
     if (!moved && !click && !right && !wheel) return;
     n = menu_buttons(menu, buttons, &focused);
-    if (!n) return;
+    int shortcut_count = menu_shortcuts(menu, shortcuts);
     /* Menus are drawn for 4:3, centred in the window (also over a widescreen
      * level, where the 2D is squeezed back to the middle). */
     float view_w = (float)w, view_h = (float)w * 3 / 4;
@@ -932,6 +992,14 @@ static void native_mouse_frame(void)
         view_w = (float)h * 4 / 3;
     }
     float gx = (x - ((float)w - view_w) / 2) * 640 / view_w, gy = (y - ((float)h - view_h) / 2) * 480 / view_h;
+    uint32_t shortcut = button_at(shortcuts, shortcut_count, gx, gy);
+    if (shortcut && shortcut != hovered_shortcut) menu_change_sound();
+    hovered_shortcut = shortcut;
+    if (shortcut) {
+        if (click) menu_key(shortcut_key(shortcut));
+        else if (right) menu_key(VK_ESCAPE);
+        return;
+    }
     hit = button_at(buttons, n, gx, gy);
     if ((click || right) && getenv("RECOMP_MENU_MOUSE_TRACE")) {
         fprintf(stderr, "[MENU MOUSE] menu %08X at %.0f,%.0f: %d buttons, focused %08X, hit %08X\n", menu, gx, gy,
@@ -946,6 +1014,7 @@ static void native_mouse_frame(void)
     if (hit && hit != focused && (moved || click || right || wheel)) {
         virtual_call(focused, VTABLE_KILL_FOCUS, NULL, 0);
         virtual_call(hit, VTABLE_SET_FOCUS, NULL, 0);
+        menu_change_sound();
     }
     if (click && hit && !button_key(hit, VK_RIGHT)) menu_key(VK_RETURN);
     if (right && !(hit && button_key(hit, VK_LEFT))) menu_key(VK_ESCAPE);
@@ -978,6 +1047,7 @@ void pc_controls_frame(void)
         if (enabled) native_mouse_frame();
         return;
     }
+    int old_selected = selected;
     int wheel = xbox_KbmMenuWheel();
     if (capturing >= 0) {
         int key = wheel > 0 ? WHEEL_UP : wheel < 0 ? WHEEL_DOWN : 0;
@@ -1035,6 +1105,7 @@ void pc_controls_frame(void)
             if (selected >= ROW_COUNT) selected = ROW_COUNT - 1;
         }
     }
+    if (selected != old_selected) menu_change_sound();
     update_page();
 }
 
@@ -1132,7 +1203,9 @@ static void quit_frame(void)
     float gx = (x - (w - vw) / 2) * 640 / vw, gy = (y - (h - vh) / 2) * 480 / vh;
     if (gy >= 265 && gy < 310 && ((gx >= 140 && gx < 270) || (gx >= 350 && gx < 470)) &&
         (x != pointer_x || y != pointer_y || click)) {
+        int old_selected = quit_selected;
         quit_selected = gx < 305 ? 0 : 1;
+        if (quit_selected != old_selected) menu_change_sound();
         if (click) call(quit_selected ? sub_0002B52A : quit_desktop, 0, NULL, 0);
         update_quit();
     }
@@ -1198,6 +1271,7 @@ static void settings_key(void)
 
 static void settings_frame(void)
 {
+    int old_selected = selected_setting;
     int x, y, w, h, click = xbox_FramebufferMouseClicks(0), right = xbox_FramebufferMouseClicks(1);
     int wheel = xbox_KbmMenuWheel();
     if (xbox_FramebufferPointer(&x, &y, &w, &h)) {
@@ -1225,6 +1299,7 @@ static void settings_frame(void)
         if (selected_setting < 0) selected_setting = 0;
         if (selected_setting >= PC_SETTINGS_ROWS) selected_setting = PC_SETTINGS_ROWS - 1;
     }
+    if (selected_setting != old_selected) menu_change_sound();
     update_settings_page();
 }
 
