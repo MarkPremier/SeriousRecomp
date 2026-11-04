@@ -27,7 +27,7 @@ void sub_002B78DF(void){abort();}
 void sub_0019D290(void){abort();}
 void sub_00367844_gen(void){abort();}
 void sub_003098A0_gen(void){abort();}
-void sub_00309700(void){abort();}
+void sub_00304F90(void) { abort(); }
 static void run(uint32_t caller,int sync,int expected){
  interval=sync;waits=0;pc_frame_calls=0;g_esp=0x1000;WORD(g_esp)=caller;
  g_eax=99;g_ecx=2;g_edx=3;g_ebx=4;g_esi=5;g_edi=6;g_ebp=7;g_seh_ebp=8;

@@ -222,6 +222,52 @@ void sub_003098A0(void)
     sub_003098A0_gen();
 }
 
+/* XDK 4928 KickOff (this = device in ECX) with the write-combine flush left
+ * out. The original sets PFB 0x100410 bit 16 and spins until the GPU clears
+ * it; here only the executor's busy-bit ack clears it, once per pass of the
+ * pushbuffer walk, so every kick waited out a walk -- half the game thread's
+ * time in torch-lit rooms. Host stores are already coherent, and the bit
+ * reads clear after either way. Everything else is the original, in order:
+ * the PUT publish (and the copy at +0x2C), the 0x313C4C wait loop, and the
+ * early-device branch. */
+#define KICK_FLAGS     0x08u
+#define KICK_PUT       0x2Cu
+#define KICK_REGISTERS 0x23BCu
+extern void sub_00304F90(void);
+void sub_00309700(void)
+{
+    uint32_t device = g_ecx;
+    uint32_t put = (GUEST32(device + KICK_FLAGS) & 4) ? GUEST32(device + 0x35C) : GUEST32(device);
+    GUEST32(device + KICK_PUT) = put;
+    if (!(GUEST32(device + KICK_FLAGS) & 0x2000)) {
+        GUEST32(GUEST32(device + KICK_REGISTERS) + 0x40) = put & 0x0FFFFFFFu;
+        g_edx = put & 0x0FFFFFFFu;
+        g_eax = GUEST32(0x00313C4C);
+        if (g_eax) {
+            do {
+                g_esp -= 4;
+                GUEST32(g_esp) = 0x00309775u;
+                sub_00304F90();
+            } while (g_eax);
+            g_eax = device;
+            GUEST32(device + KICK_FLAGS) |= 0x2000;
+        }
+    } else {
+        /* Flag 0x2000 set: PUT and GET go to the block at 0x313C00 instead. */
+        uint32_t registers = 0x00313C00u, start = GUEST32(device) & 0x0FFFFFFFu;
+        GUEST32(device + KICK_REGISTERS) = registers;
+        GUEST32(registers + 0x40) = start;
+        GUEST32(registers + 0x44) = start;
+        GUEST32(GUEST32(device + 0x34)) = GUEST32(device + 0x30) - 2;
+        GUEST32(device + 0x257C) = GUEST32(device + 0x2C10);
+        GUEST32(device + 0x2BD8) = GUEST32(device + 0x40);
+        g_eax = device;
+        g_edx = GUEST32(device + 0x40);
+    }
+    g_ecx = device;
+    g_esp += 4; /* ret */
+}
+
 /* Open_t reserves a lazy stream buffer; the console fills it through SEH page
  * faults. Committed guest RAM cannot fault here. Reuse the translated page-in
  * routine instead of reimplementing the engine's file/archive formats. */

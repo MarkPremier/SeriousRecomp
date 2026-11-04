@@ -52,7 +52,7 @@ void sub_002B78DF(void) { abort(); }
 void sub_0019D290(void) { abort(); }
 void sub_00367844_gen(void) { abort(); }
 void sub_003098A0_gen(void) { abort(); }
-void sub_00309700(void) { abort(); }
+void sub_00304F90(void) { abort(); }
 
 static void run(uint32_t file, uint32_t readonly, uint32_t cursor,
                 uint32_t high, unsigned expected_pages, uint32_t expected_bytes)

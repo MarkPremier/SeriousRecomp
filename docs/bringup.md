@@ -1632,3 +1632,49 @@ Installed Release SHA-256:
   not located yet.
 - The 128 MB save-stream reservations clamp to 64 then 32 MB over a session:
   heap fragmentation (used stays at 89.7 MB), not a leak.
+
+## 2026-11-04 (late): lens flares fixed, stutter, DirectSound gate
+
+- **Lens flares in widescreen (fixed, toolkit).** The open item above took a
+  different fix. The flare pass is `sub_00245C30`, not `sub_001CE160` (that
+  one is model occlusion). It reads last frame's ZPASS result per flare
+  (`[0x4A3860]` = `sub_001D8720`, which spins until the report is written),
+  then draws a 3-vertex test triangle at the light (ortho, colour mask
+  0x01010101, LEQUAL, no depth write) between Begin/EndVisibilityTest
+  (`0x304FD0`/`0x305070`). Its depth-buffer read path (`0x245DBC`) is dead
+  code: `[0x44B200]` is forced to 10 or 11 first. The toolkit now leaves any
+  2D draw made while ZPASS counts where the game put it, and squeezes additive
+  2D draws (the flare sprites) about their own centre. For a textured
+  triangle, that centre is where its mid texture coordinates land, so the two
+  halves of a rotated quad stay together. Batches spanning the screen are
+  never squeezed. Before this, the test triangle was pulled toward the middle
+  with the HUD, tested the wrong depth, and flares showed through walls.
+- **Stutter in torch-lit rooms (fixed).** The disk shader cache was warm: no
+  compiles during the walk. A sampling profile of the game thread (scratchpad
+  `sampler.ps1` + `symbolize.py`, linker map) showed:
+  - 47–65% of its time in D3D KickOff `sub_00309700`, spinning on PFB
+    `0x100410` bit 16. Only the executor's busy-bit ack clears it, once per
+    walk pass. KickOff is now translated in `recomp_manual.c` without that
+    wait; every other store and register result is the original's
+    (`tests/fence_submit_test.c` checks both branches).
+  - 8–16% in `sub_001D8720` waiting for occlusion results the host GPU had
+    not finished. Toolkit reports are now keyed by destination: one still
+    pending after 2 ms (`RECOMP_ZPASS_WAIT_MS`) gets that destination's
+    previous count, and the real count updates it when it lands. Unknown
+    keys still wait (250 ms cap).
+  Same automated temple walk, frames over 25 ms between 130 and 180 s: 109
+  before (11 over 40 ms, worst 70 ms), 0 after. A 390 s soak with repeated
+  firing ran without a crash (game over from enemies).
+- **DirectSound list crash (hardened, not reproduced).** The recorded crash
+  (`analysis/aspect_baseline`) is in DirectSound's work loop over the list at
+  `+0x740` (`0x367741`, voice vtable `+0x14`), reading a junk node.
+  DirectSound relies on its ISR/DPC never running while a thread is at
+  DISPATCH_LEVEL. The toolkit's handshake keeps them apart, but the APU
+  delivered anyway after 50 consecutive holds, and DPCs after 250 ms. Busy
+  threads that keep raising and lowering can meet both limits. Both escapes
+  now require a stuck raise: no guest thread crossing DISPATCH_LEVEL for the
+  whole hold-off (`xbox_IrqlGuestCrossings`, host ISRs not counted). The APU
+  logs each forced delivery; the soak logged none.
+- `tests/nv2a_clear` (`nv2a_clear_gpu`) fails here with the D3D device
+  removed on an occlusion-query read (0x887A0005 / 0x887A0020), identically
+  on the committed toolkit, so it predates these changes. `nv2a_zpass` passes.
