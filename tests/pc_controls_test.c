@@ -56,7 +56,8 @@ void xbox_KbmSetMenuMode(int on){(void)on;}
 void xbox_KbmSetRawMouse(int on){raw_mouse=on;}
 void xbox_KbmSetCapture(int on){capture=on;}
 void xbox_KbmSetBinding(const char *target,const int *binding,int count){(void)target;(void)binding;(void)count;}
-void xbox_KbmPulse(const char *target,int ms){CHECK(!strcmp(target,"START"));if(ms)++start_pulses;}
+static int a_pulses;
+void xbox_KbmPulse(const char *target,int ms){if(!strcmp(target,"A")){++a_pulses;return;}CHECK(!strcmp(target,"START"));if(ms)++start_pulses;}
 int xbox_KbmInputDown(int key){return key>=0 && key<0x108?down[key]:0;}
 int xbox_KbmMenuWheel(void){int n=wheel;wheel=0;return n;}
 static int video_active;
@@ -310,7 +311,13 @@ int main(void)
         WORD(ACTIVE_MENU)=0;frames_2d=5;down[VK_RETURN]=1;pc_controls_movie_frame();
         CHECK(start_pulses==before_pulses+2);
         down[VK_RETURN]=0;pc_controls_movie_frame();
-        frames_2d=0;down[VK_RETURN]=1;pc_controls_movie_frame();CHECK(start_pulses==before_pulses+2); /* in play */
+        action_seen=1;action_ms=(LONG)GetTickCount();
+        frames_2d=0;down[VK_RETURN]=1;pc_controls_movie_frame();
+        CHECK(start_pulses==before_pulses+2 && a_pulses==0); /* in play */
+        down[VK_RETURN]=0;pc_controls_movie_frame();
+        /* End-of-level statistics: 3D models, but no play running: A. */
+        action_ms-=1000;down[VK_RETURN]=1;pc_controls_movie_frame();CHECK(a_pulses==1);
+        action_seen=0;
         down[VK_RETURN]=0;pc_controls_movie_frame();
         WORD(ACTIVE_MENU)=page;frames_2d=5;down[VK_RETURN]=1;pc_controls_movie_frame();
         CHECK(start_pulses==before_pulses+2); /* a menu takes Enter itself */

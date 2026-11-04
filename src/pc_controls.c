@@ -163,6 +163,17 @@ void pc_controls_menu_drawn(void)
     InterlockedExchange(&menu_draw_seen, 1);
 }
 
+/* Whether a level is being played: Sam's action builder (sub_00070810,
+ * pc_controls_input_begin) runs every game tick of play, and not while
+ * NETRICSA (the briefing, the end-of-level statistics), a movie or a loading
+ * screen is up. Until it has run once, nothing counts as play. */
+static volatile LONG action_ms, action_seen;
+
+static int playing(void)
+{
+    return action_seen && GetTickCount() - (DWORD)action_ms < 250;
+}
+
 static uint32_t shown_menu(void)
 {
     uint32_t menu = WORD(ACTIVE_MENU);
@@ -722,11 +733,13 @@ static void keyboard_frame(void)
     }
 }
 
-/* Escape, Enter, Space or a left click skips a movie, as Start does on a pad,
- * and passes the "Please press START to continue" briefing that follows the
- * level load (NETRICSA, with its preview in a small box, so not a full-screen
- * video). Both are screens with no menu and no 3D world; in play there is
- * always 3D, so those keys keep their meaning there. The boot movies play on
+/* Escape, Enter, Space or a left click skips a movie, as Start does on a pad;
+ * passes the "Please press START to continue" briefing that follows the level
+ * load (NETRICSA, with its preview in a small box, so not a full-screen video,
+ * on a screen with no 3D world); and continues the end-of-level statistics as
+ * A does ("A Continue": that screen has 3D models, but no play is running).
+ * None of these happen with a menu shown or in play, so the keys keep their
+ * in-game meaning there. The boot movies play on
  * their own worker while the main thread loads, and do not reliably pass
  * through any presenter this file hooks, so a small thread of its own watches
  * for the press (movie_thread). It only reads key and screen state and pulses
@@ -740,9 +753,13 @@ void pc_controls_movie_frame(void)
     for (int i = 0; i < (int)(sizeof skip_keys / sizeof skip_keys[0]); ++i)
         if (physical_down(skip_keys[i])) down = 1;
     if (InterlockedExchange(&held, down) || !down) return;
-    if (!xbox_VideoActive() && (shown_menu() || nv2a_gpu_frames_without_3d() < 2)) return;
-    xbox_KbmPulse("START", 150);
-    fprintf(stderr, "[PC CONTROLS] movie skipped from the keyboard/mouse\n");
+    if (xbox_VideoActive() || (!shown_menu() && nv2a_gpu_frames_without_3d() >= 2)) {
+        xbox_KbmPulse("START", 150);
+        fprintf(stderr, "[PC CONTROLS] movie skipped from the keyboard/mouse\n");
+    } else if (!shown_menu() && !playing()) {
+        xbox_KbmPulse("A", 150);
+        fprintf(stderr, "[PC CONTROLS] NETRICSA screen continued from the keyboard/mouse\n");
+    }
 }
 
 static DWORD WINAPI movie_thread(LPVOID unused)
@@ -780,7 +797,10 @@ static void wide_frame(void)
         in_level = 0;
     else if (!menu && !xbox_VideoActive())
         in_level = 1;
-    float wide = in_level && (!menu || menu == PAUSE_MENU) ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
+    /* NETRICSA's pages (the end-of-level statistics) are laid out for 4:3 as
+     * the menus are, so wide is play and the pause menu over it only. */
+    float wide = in_level && ((!menu && playing()) || menu == PAUSE_MENU) ? pc_settings_aspect() * 3.0f / 4.0f
+                                                                          : 1.0f;
     if (fabsf(wide - view_wide) > 0.0001f) {
         view_wide = wide;
         nv2a_gpu_set_wide_factor(wide);
@@ -1323,6 +1343,8 @@ static void settings_frame(void)
 int pc_controls_input_begin(uint32_t profile)
 {
     injected = 0;
+    InterlockedExchange(&action_ms, (LONG)GetTickCount());
+    InterlockedExchange(&action_seen, 1);
     /* The action builder runs every game tick, also when no presenter this
      * file hooks does (after Back on the pause menu the engine plays on with
      * ACTIVE_MENU still naming the Difficulty page and neither vblank wait

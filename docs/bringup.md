@@ -1610,3 +1610,25 @@ Installed Release SHA-256:
   and no 3D for two flips (toolkit `nv2a_gpu_frames_without_3d`); play always
   has 3D, so Enter/Space/click keep their in-game meaning. Verified: Enter at
   the briefing started play.
+
+## 2026-11-04 (night): NETRICSA screens with KB/M, lens-flare cause
+
+- **End-of-level statistics** ("A Continue"): KB/M did nothing and the page
+  was drawn wide. A level counts as being played while Sam's action builder
+  (`sub_00070810`) has run in the last 250 ms; it does not run on NETRICSA
+  pages. Escape/Enter/Space/click now send A on a screen with no menu and no
+  play (Start stays for movies and the 2D-only briefing), and widescreen is
+  only used in play and on the pause menu. Unit-tested; not yet seen on the
+  real statistics screen.
+- **Lens flares displaced in widescreen (open).** In the PC source,
+  `RenderLensFlares` (RenderModels.cpp) tests visibility at, and places every
+  flare element along the line through the screen centre from, `lfi_fI/fJ`
+  (the light's position from the widened projection), all as 2D draws. The
+  toolkit squeezes 2D toward the middle 4:3, so flares and their visibility
+  test land off their lights. Fix plan: scale `lfi_fI` about the centre by the
+  wide factor where it is written (AddLensFlare) so the squeeze cancels. On
+  Xbox the flare pass is inlined in the renderer (`sub_001CE160`, which calls
+  the IsPointVisible pointer at `0x4A3860` = `sub_001D8720`); AddLensFlare is
+  not located yet.
+- The 128 MB save-stream reservations clamp to 64 then 32 MB over a session:
+  heap fragmentation (used stays at 89.7 MB), not a leak.
