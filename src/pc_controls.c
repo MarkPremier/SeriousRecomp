@@ -22,6 +22,8 @@ extern void xbox_KbmSetMenuMode(int on), xbox_KbmSetRawMouse(int on), xbox_KbmSe
 extern void xbox_KbmSetBinding(const char *target, const int *keys, int count);
 extern void xbox_KbmPulse(const char *target, int ms);
 extern int xbox_KbmInputDown(int key), xbox_KbmMenuWheel(void);
+extern int xbox_VideoActive(void);
+extern void nv2a_gpu_set_wide_factor(float factor), nv2a_gpu_set_wide_title_fov(int on);
 extern int xbox_FramebufferKeyDown(int key), xbox_FramebufferMouseButton(int button);
 extern int xbox_FramebufferMouseClicks(int button), xbox_FramebufferMouseDelta(int *dx, int *dy);
 extern int xbox_FramebufferPointer(int *x, int *y, int *w, int *h);
@@ -51,8 +53,48 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define QUIT_NO       0x00030CFEu
 #define MAIN_MENU     0x0046F2A0u
 #define VISIBLE_ROWS  9
-#define BUTTON_SIZE   0xC8u
 #define TEXT_SIZE     128u
+
+/* Sam's menu objects, laid out as the USA XBE's own code uses them (the
+ * launcher refuses any other default.xbe). New buttons are clones of an
+ * existing one and new pages copy an existing page's vtable, so these are the
+ * only fields this file depends on; layout_ok() checks the templates before
+ * anything is built. */
+#define TEMPLATE_BUTTON 0x0046F3C8u /* the main menu's first text button */
+#define MAIN_MENU_LAST  0x0046F6E8u /* the main menu's last original entry */
+#define SCREEN_VTABLE   0x003AA210u /* a menu page's vtable, in .rdata */
+#define EMPTY_STRING    0x004493F8u /* the title's shared empty CTString */
+#define RDATA_START     0x003A9840u
+#define RDATA_END       0x003F8A6Cu
+#define TEXT_END        0x00303D30u
+
+/* Text button. */
+#define BUTTON_SIZE         0xC8u
+#define GADGET_X            0x14u /* current position and scale ... */
+#define GADGET_Y            0x18u
+#define GADGET_SCALE        0x20u
+#define GADGET_TARGET_X     0x28u /* ... and where the entrance animation ends */
+#define GADGET_TARGET_Y     0x2Cu
+#define GADGET_TARGET_SCALE 0x34u
+#define GADGET_TEXT         0x4Cu /* char * */
+#define GADGET_6C           0x6Cu /* -1 on list rows, 0 on centred choices; meaning unconfirmed */
+#define GADGET_FOCUSED      0x7Cu
+#define GADGET_VISIBLE      0x80u
+#define GADGET_ALIGN        0x8Cu
+#define GADGET_LEFT         0x94u /* neighbours for d-pad navigation */
+#define GADGET_RIGHT        0x98u
+#define GADGET_UP           0x9Cu
+#define GADGET_DOWN         0xA0u
+#define GADGET_TRIGGER      0xBCu /* code address called on A / Enter */
+
+/* Menu page: the object, its private copy of the vtable, then its title. */
+#define SCREEN_FOCUS       0x14u /* focused button */
+#define SCREEN_TITLE       0x20u /* char * */
+#define SCREEN_VTABLE_COPY 0x40u
+#define VTABLE_SIZE        0x2Cu
+#define VTABLE_KEY         0x18u /* key handler slot */
+#define SCREEN_TITLE_TEXT  (SCREEN_VTABLE_COPY + VTABLE_SIZE)
+#define SCREEN_SIZE        SCREEN_TITLE_TEXT
 
 enum {
     FORWARD,
@@ -97,6 +139,11 @@ static const struct {
 };
 enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, DEFAULTS_ROW, ROW_COUNT };
 static int keys[BIND_COUNT], speed = 5, invert_y, enabled;
+/* The thread that runs the title's main loop. The boot movie's worker presents
+ * through the same calls as the main loop does, and the menu work here calls
+ * Sam's menu code, which only the main thread may run. */
+static DWORD main_thread;
+static DWORD WINAPI movie_thread(LPVOID unused);
 static char ini[MAX_PATH];
 static uint32_t page, entry, rows[ROW_COUNT], values[ROW_COUNT], title, help, status, back_button;
 static uint32_t settings_page, settings_entry, setting_rows[PC_SETTINGS_ROWS],
@@ -218,13 +265,25 @@ void pc_controls_load(void)
     if (!flag) _putenv_s("RECOMP_KBM", "1");
     if (!getenv("RECOMP_KBM_LOOK_DIRECT")) _putenv_s("RECOMP_KBM_LOOK_DIRECT", "0");
     if (!getenv("RECOMP_KBM_WHEEL_MOVE")) _putenv_s("RECOMP_KBM_WHEEL_MOVE", "0");
-    /* Menu keys remain usable after any gameplay rebinding. No game-specific
-     * camera addresses or controller defaults from Turok are used. */
-    _putenv_s("RECOMP_KBM_MAP", "A=None,B=None,X=None,Y=None,BLACK=None,WHITE=None,LT=None,RT=None,START="
-                                "None,BACK=None,LTHUMB=None,RTHUMB=None,UP=None,DOWN=None,LEFT=None,RIGHT="
-                                "None,MOVE_UP=None,MOVE_DOWN=None,MOVE_LEFT=None,MOVE_RIGHT=None");
-    _putenv_s("RECOMP_KBM_MENU_MAP", "A=None,B=None,START=None,UP=None,DOWN=None,LEFT=None,RIGHT=None,MOVE_"
-                                     "UP=None,MOVE_DOWN=None,MOVE_LEFT=None,MOVE_RIGHT=None");
+    /* The runtime's own key maps start empty: this file binds every action
+     * (apply), so menu keys keep working after any gameplay rebinding. No
+     * game-specific camera addresses or controller defaults from Turok are
+     * used. Either map can still be set from the environment for diagnosis. */
+    if (!getenv("RECOMP_KBM_MAP"))
+        _putenv_s("RECOMP_KBM_MAP", "A=None,B=None,X=None,Y=None,BLACK=None,WHITE=None,LT=None,RT=None,"
+                                    "START=None,BACK=None,LTHUMB=None,RTHUMB=None,UP=None,DOWN=None,"
+                                    "LEFT=None,RIGHT=None,MOVE_UP=None,MOVE_DOWN=None,MOVE_LEFT=None,"
+                                    "MOVE_RIGHT=None");
+    if (!getenv("RECOMP_KBM_MENU_MAP"))
+        _putenv_s("RECOMP_KBM_MENU_MAP", "A=None,B=None,START=None,UP=None,DOWN=None,LEFT=None,RIGHT=None,"
+                                         "MOVE_UP=None,MOVE_DOWN=None,MOVE_LEFT=None,MOVE_RIGHT=None");
+    main_thread = GetCurrentThreadId();
+    /* Sam widens its own view for wide targets (sub_001D1C00 in recomp_manual.c). */
+    nv2a_gpu_set_wide_title_fov(1);
+    if (enabled && !getenv("RECOMP_PC_CONTROLS_NO_THREAD")) {
+        HANDLE thread = CreateThread(NULL, 0, movie_thread, NULL, 0, NULL);
+        if (thread) CloseHandle(thread);
+    }
     if (path && *path)
         snprintf(ini, sizeof ini, "%s", path);
     else {
@@ -253,14 +312,14 @@ static uint32_t alloc(uint32_t bytes)
 
 static void text(uint32_t gadget, const char *label)
 {
-    if (gadget) snprintf((char *)PTR(WORD(gadget + 0x4C)), TEXT_SIZE, "%s", label);
+    if (gadget) snprintf((char *)PTR(WORD(gadget + GADGET_TEXT)), TEXT_SIZE, "%s", label);
 }
 
 static void position(uint32_t gadget, float x, float y, float scale)
 {
-    FLOAT(gadget + 0x14) = FLOAT(gadget + 0x28) = x;
-    FLOAT(gadget + 0x18) = FLOAT(gadget + 0x2C) = y;
-    FLOAT(gadget + 0x20) = FLOAT(gadget + 0x34) = scale;
+    FLOAT(gadget + GADGET_X) = FLOAT(gadget + GADGET_TARGET_X) = x;
+    FLOAT(gadget + GADGET_Y) = FLOAT(gadget + GADGET_TARGET_Y) = y;
+    FLOAT(gadget + GADGET_SCALE) = FLOAT(gadget + GADGET_TARGET_SCALE) = scale;
 }
 
 static void options_position(uint32_t gadget, float y, float scale, int row)
@@ -279,17 +338,17 @@ static uint32_t button(uint32_t screen, const char *label, float x, float y, flo
     if (!va) return 0;
     /* Sam's ordinary text button, preserving its font and focus renderer. The
      * clone owns its text and is retained for the lifetime of this process. */
-    memcpy(PTR(va), PTR(0x46F3C8), BUTTON_SIZE);
+    memcpy(PTR(va), PTR(TEMPLATE_BUTTON), BUTTON_SIZE);
     WORD(va + 8) = WORD(va + 12) = 0;
-    WORD(va + 0x4C) = va + BUTTON_SIZE;
-    WORD(va + 0x50) = WORD(va + 0x90) = 0x4493F8; /* title's empty CTString */
+    WORD(va + GADGET_TEXT) = va + BUTTON_SIZE;
+    WORD(va + 0x50) = WORD(va + 0x90) = EMPTY_STRING; /* title's empty CTString */
     WORD(va + 0x58) = WORD(va + 0x5C) = WORD(va + 0x60) = WORD(va + 0x64) = 0;
-    WORD(va + 0x7C) = 0;
-    WORD(va + 0x80) = WORD(va + 0x74) = 1;
-    WORD(va + 0x94) = WORD(va + 0x98) = WORD(va + 0x9C) = WORD(va + 0xA0) = 0;
-    WORD(va + 0xA4) = WORD(va + 0xA8) = WORD(va + 0xBC) = WORD(va + 0xC0) = 0;
-    WORD(va + 0x6C) = 0xFFFFFFFFu;
-    WORD(va + 0x8C) = 2; /* left-aligned text */
+    WORD(va + GADGET_FOCUSED) = 0;
+    WORD(va + GADGET_VISIBLE) = WORD(va + 0x74) = 1;
+    WORD(va + 0x94) = WORD(va + 0x98) = WORD(va + GADGET_UP) = WORD(va + GADGET_DOWN) = 0;
+    WORD(va + 0xA4) = WORD(va + 0xA8) = WORD(va + GADGET_TRIGGER) = WORD(va + 0xC0) = 0;
+    WORD(va + GADGET_6C) = 0xFFFFFFFFu;
+    WORD(va + GADGET_ALIGN) = 2; /* left-aligned text */
     position(va, x, y, scale);
     text(va, label);
     call(sub_0002727C, screen, &va, 1);
@@ -303,8 +362,8 @@ static void update_page(void)
     if (selected >= scroll + VISIBLE_ROWS) scroll = selected - VISIBLE_ROWS + 1;
     for (int i = 0; i < ROW_COUNT; ++i) {
         int visible = i >= scroll && i < scroll + VISIBLE_ROWS;
-        WORD(rows[i] + 0x80) = WORD(values[i] + 0x80) = visible;
-        WORD(rows[i] + 0x7C) = WORD(values[i] + 0x7C) = i == selected;
+        WORD(rows[i] + GADGET_VISIBLE) = WORD(values[i] + GADGET_VISIBLE) = visible;
+        WORD(rows[i] + GADGET_FOCUSED) = WORD(values[i] + GADGET_FOCUSED) = i == selected;
         position(rows[i], 90, 145 + (i - scroll) * 26.0f, 0.57f);
         position(values[i], 410, 145 + (i - scroll) * 26.0f, 0.57f);
         if (i < BIND_COUNT) {
@@ -320,7 +379,7 @@ static void update_page(void)
             snprintf(label, sizeof label, "Enter / A");
         text(values[i], label);
     }
-    WORD(page + 0x14) = rows[selected];
+    WORD(page + SCREEN_FOCUS) = rows[selected];
     snprintf(label, sizeof label, "%d - %d of %d", scroll + 1,
              scroll + VISIBLE_ROWS < ROW_COUNT ? scroll + VISIBLE_ROWS : ROW_COUNT, ROW_COUNT);
     text(status, label);
@@ -328,17 +387,45 @@ static void update_page(void)
                               : "Arrows: select   Enter/A: change   Delete: clear   Esc/B: back");
 }
 
+/* The templates this file clones must look like Sam's own: a constructed text
+ * button and a page vtable, both pointing into .rdata at real code. Anything
+ * else means the layout above does not hold, and building on it would corrupt
+ * the menus, so the PC pages are left out instead. */
+static int vtable_ok(uint32_t vtable, int slots)
+{
+    if (vtable < RDATA_START || vtable + slots * 4 > RDATA_END) return 0;
+    for (int i = 0; i < slots; ++i)
+        if (WORD(vtable + i * 4) < 0x10000 || WORD(vtable + i * 4) >= TEXT_END) return 0;
+    return 1;
+}
+
+static int layout_ok(void)
+{
+    if (vtable_ok(WORD(TEMPLATE_BUTTON), 4) && vtable_ok(SCREEN_VTABLE, VTABLE_SIZE / 4) &&
+        vtable_ok(WORD(MAIN_MENU), 4) && WORD(TEMPLATE_BUTTON + GADGET_TEXT) >= 0x10000)
+        return 1;
+    fprintf(stderr, "[PC CONTROLS] menu templates are not as expected; PC Controls, PC Settings and "
+                    "Quit Game are disabled\n");
+    return 0;
+}
+
 void pc_controls_build_menu(void)
 {
+    static int checked, usable;
     if (page) return;
-    page = alloc(0x40 + 0x2C + TEXT_SIZE);
+    if (!checked) {
+        checked = 1;
+        usable = layout_ok();
+    }
+    if (!usable) return;
+    page = alloc(SCREEN_SIZE + TEXT_SIZE);
     if (!page) return;
     call(sub_0002F12B, page, NULL, 0);
-    memcpy(PTR(page + 0x40), PTR(0x3AA210), 0x2C);
-    WORD(page) = page + 0x40;
-    WORD(page + 0x40 + 0x18) = PAGE_KEY;
-    WORD(page + 0x20) = page + 0x6C;
-    snprintf((char *)PTR(page + 0x6C), TEXT_SIZE, "PC Controls");
+    memcpy(PTR(page + SCREEN_VTABLE_COPY), PTR(SCREEN_VTABLE), VTABLE_SIZE);
+    WORD(page) = page + SCREEN_VTABLE_COPY;
+    WORD(page + SCREEN_VTABLE_COPY + VTABLE_KEY) = PAGE_KEY;
+    WORD(page + SCREEN_TITLE) = page + SCREEN_TITLE_TEXT;
+    snprintf((char *)PTR(page + SCREEN_TITLE_TEXT), TEXT_SIZE, "PC Controls");
     title = button(page, "PC CONTROLS", 90, 88, 1.05f);
     for (int i = 0; i < ROW_COUNT; ++i) {
         const char *label = i < BIND_COUNT    ? actions[i].label
@@ -357,15 +444,15 @@ void pc_controls_build_menu(void)
     back_button = button(page, "BACK", 510, 397, 0.5f);
     entry = button(OPTIONS, "PC CONTROLS", 140, 372, 0.65f);
     if (!entry || !title || !status || !help || !back_button) return;
-    WORD(entry + 0xBC) = OPEN_PAGE;
-    settings_page = alloc(0x40 + 0x2C + TEXT_SIZE);
+    WORD(entry + GADGET_TRIGGER) = OPEN_PAGE;
+    settings_page = alloc(SCREEN_SIZE + TEXT_SIZE);
     if (!settings_page) return;
     call(sub_0002F12B, settings_page, NULL, 0);
-    memcpy(PTR(settings_page + 0x40), PTR(0x3AA210), 0x2C);
-    WORD(settings_page) = settings_page + 0x40;
-    WORD(settings_page + 0x40 + 0x18) = SETTINGS_KEY;
-    WORD(settings_page + 0x20) = settings_page + 0x6C;
-    snprintf((char *)PTR(settings_page + 0x6C), TEXT_SIZE, "PC Settings");
+    memcpy(PTR(settings_page + SCREEN_VTABLE_COPY), PTR(SCREEN_VTABLE), VTABLE_SIZE);
+    WORD(settings_page) = settings_page + SCREEN_VTABLE_COPY;
+    WORD(settings_page + SCREEN_VTABLE_COPY + VTABLE_KEY) = SETTINGS_KEY;
+    WORD(settings_page + SCREEN_TITLE) = settings_page + SCREEN_TITLE_TEXT;
+    snprintf((char *)PTR(settings_page + SCREEN_TITLE_TEXT), TEXT_SIZE, "PC Settings");
     if (!button(settings_page, "PC SETTINGS", 90, 88, 1.05f)) return;
     for (int i = 0; i < PC_SETTINGS_ROWS; ++i) {
         setting_rows[i] = button(settings_page, pc_settings_label(i), 90, 145 + i * 26.0f, 0.57f);
@@ -378,7 +465,7 @@ void pc_controls_build_menu(void)
         return;
     settings_entry = button(OPTIONS, "PC SETTINGS", 140, 400, 0.65f);
     if (!settings_entry) return;
-    WORD(settings_entry + 0xBC) = OPEN_SETTINGS;
+    WORD(settings_entry + GADGET_TRIGGER) = OPEN_SETTINGS;
     update_settings_page();
     update_page();
     apply();
@@ -394,8 +481,8 @@ void pc_controls_options_layout(void)
     int visible = 0;
     for (unsigned i = 0; i < sizeof original / sizeof original[0]; ++i) {
         uint32_t row = original[i];
-        if (!WORD(row + 0x80)) continue;
-        options_position(row, 157 + 30.0f * visible, FLOAT(row + 0x20), visible);
+        if (!WORD(row + GADGET_VISIBLE)) continue;
+        options_position(row, 157 + 30.0f * visible, FLOAT(row + GADGET_SCALE), visible);
         ++visible;
         if (!first) first = row;
         last = row;
@@ -403,12 +490,12 @@ void pc_controls_options_layout(void)
     if (!last) return;
     options_position(entry, 157 + 30.0f * visible - 19, 0.65f, visible);
     options_position(settings_entry, 157 + 30.0f * (visible + 1) - 19, 0.65f, visible + 1);
-    WORD(last + 0xA0) = entry;
-    WORD(first + 0x9C) = settings_entry;
-    WORD(entry + 0x9C) = last;
-    WORD(entry + 0xA0) = settings_entry;
-    WORD(settings_entry + 0x9C) = entry;
-    WORD(settings_entry + 0xA0) = first;
+    WORD(last + GADGET_DOWN) = entry;
+    WORD(first + GADGET_UP) = settings_entry;
+    WORD(entry + GADGET_UP) = last;
+    WORD(entry + GADGET_DOWN) = settings_entry;
+    WORD(settings_entry + GADGET_UP) = entry;
+    WORD(settings_entry + GADGET_DOWN) = first;
 }
 
 static int physical_down(int key)
@@ -578,12 +665,68 @@ static void keyboard_frame(void)
     }
 }
 
+/* Escape, Enter, Space or a left click skips a movie, as Start does on a pad.
+ * The boot movies play on their own worker while the main thread loads, and
+ * do not reliably pass through any presenter this file hooks, so a small
+ * thread of its own watches for the press (movie_thread). It only reads key
+ * state and pulses the virtual pad, both safe from any thread. */
+void pc_controls_movie_frame(void)
+{
+    static const int skip_keys[] = {VK_ESCAPE, VK_RETURN, VK_SPACE, MOUSE1};
+    static volatile LONG held;
+    LONG down = 0;
+    if (!enabled) return;
+    for (int i = 0; i < (int)(sizeof skip_keys / sizeof skip_keys[0]); ++i)
+        if (physical_down(skip_keys[i])) down = 1;
+    if (InterlockedExchange(&held, down) || !down || !xbox_VideoActive()) return;
+    xbox_KbmPulse("START", 150);
+    fprintf(stderr, "[PC CONTROLS] movie skipped from the keyboard/mouse\n");
+}
+
+static DWORD WINAPI movie_thread(LPVOID unused)
+{
+    (void)unused;
+    for (;;) {
+        pc_controls_movie_frame();
+        Sleep(10);
+    }
+}
+
+/* Widescreen policy. The front end is drawn for 4:3 (its backdrop, and Sam's
+ * head as a 3D model) and stays 4:3; a level, and the pause menu over it, use
+ * the Aspect ratio setting. A level is running from the first frame with no
+ * menu and no movie until the main menu comes back. */
+static float view_wide = 1.0f;
+
+float pc_controls_view_wide(void)
+{
+    return view_wide;
+}
+
+static void wide_frame(void)
+{
+    static int in_level;
+    uint32_t menu = WORD(ACTIVE_MENU);
+    if (menu == MAIN_MENU)
+        in_level = 0;
+    else if (!menu && !xbox_VideoActive())
+        in_level = 1;
+    float wide = in_level ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
+    if (fabsf(wide - view_wide) > 0.0001f) {
+        view_wide = wide;
+        nv2a_gpu_set_wide_factor(wide);
+        fprintf(stderr, "[PC SETTINGS] view %.3f times as wide as 4:3\n", wide);
+    }
+}
+
 void pc_controls_frame(void)
 {
-    if (quit_entry) WORD(quit_entry + 0x80) = WORD(ACTIVE_MENU) == MAIN_MENU;
+    if (GetCurrentThreadId() != main_thread) return;
+    wide_frame();
+    if (quit_entry) WORD(quit_entry + GADGET_VISIBLE) = WORD(ACTIVE_MENU) == MAIN_MENU;
     if (quit_entry && WORD(ACTIVE_MENU) == MAIN_MENU) {
-        WORD(0x46F6E8 + 0xA0) = quit_entry;
-        WORD(0x46F3C8 + 0x9C) = quit_entry;
+        WORD(MAIN_MENU_LAST + GADGET_DOWN) = quit_entry;
+        WORD(TEMPLATE_BUTTON + GADGET_UP) = quit_entry;
     }
     follow_mode();
     keyboard_frame();
@@ -661,38 +804,38 @@ void pc_controls_frame(void)
 
 static void update_quit(void)
 {
-    for (int i = 0; i < 2; ++i) WORD(quit_choices[i] + 0x7C) = i == quit_selected;
-    WORD(quit_page + 0x14) = quit_choices[quit_selected];
+    for (int i = 0; i < 2; ++i) WORD(quit_choices[i] + GADGET_FOCUSED) = i == quit_selected;
+    WORD(quit_page + SCREEN_FOCUS) = quit_choices[quit_selected];
 }
 
 static void build_quit(void)
 {
-    quit_page = alloc(0x40 + 0x2C + TEXT_SIZE);
+    quit_page = alloc(SCREEN_SIZE + TEXT_SIZE);
     if (!quit_page) return;
     call(sub_0002F12B, quit_page, NULL, 0);
-    memcpy(PTR(quit_page + 0x40), PTR(0x3AA210), 0x2C);
-    WORD(quit_page) = quit_page + 0x40;
-    WORD(quit_page + 0x58) = QUIT_KEY;
-    WORD(quit_page + 0x20) = quit_page + 0x6C;
-    snprintf((char *)PTR(quit_page + 0x6C), TEXT_SIZE, "Quit Game");
+    memcpy(PTR(quit_page + SCREEN_VTABLE_COPY), PTR(SCREEN_VTABLE), VTABLE_SIZE);
+    WORD(quit_page) = quit_page + SCREEN_VTABLE_COPY;
+    WORD(quit_page + SCREEN_VTABLE_COPY + VTABLE_KEY) = QUIT_KEY;
+    WORD(quit_page + SCREEN_TITLE) = quit_page + SCREEN_TITLE_TEXT;
+    snprintf((char *)PTR(quit_page + SCREEN_TITLE_TEXT), TEXT_SIZE, "Quit Game");
     if (!button(quit_page, "QUIT GAME", 90, 115, 0.85f) ||
         !button(quit_page, "Return to the desktop?", 125, 190, 0.7f))
         return;
     quit_choices[0] = button(quit_page, "YES", 200, 265, 0.7f);
     quit_choices[1] = button(quit_page, "NO", 410, 265, 0.7f);
     if (!quit_choices[0] || !quit_choices[1]) return;
-    WORD(quit_choices[0] + 0xBC) = QUIT_YES;
-    WORD(quit_choices[1] + 0xBC) = QUIT_NO;
+    WORD(quit_choices[0] + GADGET_TRIGGER) = QUIT_YES;
+    WORD(quit_choices[1] + GADGET_TRIGGER) = QUIT_NO;
     for (int i = 0; i < 2; ++i) {
-        WORD(quit_choices[i] + 0x6C) = 0;
-        for (int link = 0x94; link <= 0xA0; link += 4) WORD(quit_choices[i] + link) = quit_choices[1 - i];
+        WORD(quit_choices[i] + GADGET_6C) = 0;
+        for (uint32_t link = GADGET_LEFT; link <= GADGET_DOWN; link += 4) WORD(quit_choices[i] + link) = quit_choices[1 - i];
     }
     quit_entry = button(MAIN_MENU, "QUIT GAME", 391, 339, 0.875f);
     if (!quit_entry) return;
-    WORD(quit_entry + 0x6C) = 0;
-    WORD(quit_entry + 0xBC) = OPEN_QUIT;
-    WORD(quit_entry + 0x9C) = 0x46F6E8;
-    WORD(quit_entry + 0xA0) = 0x46F3C8;
+    WORD(quit_entry + GADGET_6C) = 0;
+    WORD(quit_entry + GADGET_TRIGGER) = OPEN_QUIT;
+    WORD(quit_entry + GADGET_UP) = MAIN_MENU_LAST;
+    WORD(quit_entry + GADGET_DOWN) = TEMPLATE_BUTTON;
     quit_selected = 1;
     update_quit();
 }
@@ -703,7 +846,7 @@ static void open_quit(void)
     quit_selected = 1;
     update_quit();
     remember_menu_keys();
-    WORD(quit_entry + 0x80) = 0;
+    WORD(quit_entry + GADGET_VISIBLE) = 0;
     int w, h;
     xbox_FramebufferPointer(&pointer_x, &pointer_y, &w, &h);
     xbox_FramebufferMouseClicks(0);
@@ -765,7 +908,7 @@ static void update_settings_page(void)
 {
     char value[96], label[128];
     for (int i = 0; i < PC_SETTINGS_ROWS; ++i) {
-        WORD(setting_rows[i] + 0x7C) = WORD(setting_values[i] + 0x7C) = i == selected_setting;
+        WORD(setting_rows[i] + GADGET_FOCUSED) = WORD(setting_values[i] + GADGET_FOCUSED) = i == selected_setting;
         pc_settings_value(i, value, sizeof value);
         if (i == PC_VIDEO_DEFAULTS)
             snprintf(label, sizeof label, "%s", value);
@@ -773,7 +916,7 @@ static void update_settings_page(void)
             snprintf(label, sizeof label, "< %s >", value);
         text(setting_values[i], label);
     }
-    WORD(settings_page + 0x14) = setting_rows[selected_setting];
+    WORD(settings_page + SCREEN_FOCUS) = setting_rows[selected_setting];
 }
 
 static void open_settings_page(void)

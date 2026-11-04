@@ -16,6 +16,11 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-04)
 
+- **Latest (Claude Code, 2026-11-04):** Hor+ widescreen/ultrawide (PC Settings
+  "Aspect ratio", default Auto; front end stays 4:3), keyboard/mouse movie
+  skipping, PC controls confined to the main thread, bounded occlusion waits,
+  `KeGetCurrentThread`, named menu offsets with a template check. Toolkit
+  `serious-sam` up to `f755258`. See the last section of `docs/bringup.md`.
 - **Options entrance animation:** the PC-row layout must call Sam's transition
   setter `sub_0001AFBA` after positioning each visible Options row. `position()`
   writes both resting and animated endpoints; using it alone erased the native
@@ -341,6 +346,15 @@ Apply these from the start.
     with an empty `RECOMP_SAVE_DIR`, never only against prepared data.
 11. **Check numeric env switches by value, not presence.** `getenv("X")` is true
     for `X=0`; that bug kept two wrappers on in runs meant to test without them.
+12. **Know which thread runs a hook.** The boot movie presents from its own
+    worker through the same calls as the main loop (`sub_001A9160`), and guest
+    threads must report distinct IDs (`GetCurrentThreadId` reads the KTHREAD at
+    `fs:[0x28]` + `0x12C`). Anything that calls Sam's own code from a hook must
+    check it is on the main thread.
+13. **Widescreen is the engine's own Hor+.** `sub_001D1C00` (projection Prepare)
+    is wrapped to widen the view; the toolkit only stretches
+    (`nv2a_gpu_set_wide_title_fov`). Don't also enable the toolkit's projection
+    divide, and keep 2D (orthographic) draws in the middle 4:3.
 
 ## Do not touch
 

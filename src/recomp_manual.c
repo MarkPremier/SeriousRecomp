@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <xbox/xboxrecomp.h>
 #include "pc_controls.h"
 
@@ -26,6 +27,7 @@ extern void sub_00030710_gen(void);
 extern void sub_00030D00_gen(void);
 extern void sub_00070810_gen(void);
 extern void sub_0002B6BE_gen(void);
+extern void sub_001D1C00_gen(void);
 extern int xbox_GetPresentInterval(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
 extern RECOMP_TLS uint32_t g_ebp, g_seh_ebp;
@@ -73,6 +75,41 @@ void sub_0002B6BE(void)
 {
     pc_controls_frame();
     sub_0002B6BE_gen();
+}
+
+/* Widescreen (Hor+). CPerspectiveProjection3D::Prepare builds the view's
+ * perspective ratios and its clip planes from the horizontal field of view
+ * (+0x184, degrees) and derives the vertical one through the pixel aspect
+ * ratio (+0x64). Widening the first by the wide factor (through its tangent)
+ * and narrowing the second by the same keeps the vertical view, and the
+ * engine then culls to the wider view too -- a view widened only on the GPU
+ * would leave the new edges empty. The picture comes out squeezed into
+ * 640x480 and the wider render targets stretch it back
+ * (nv2a_gpu_set_wide_title_fov). Only full-screen views: the screen box at
+ * +0x54..+0x60 rules out shadow maps and split screens. Both fields are put
+ * back, so the game's own FOV logic (zoom, weapon models) is untouched. */
+#define PROJECTION_ASPECT     0x64u
+#define PROJECTION_SCREEN_MIN 0x54u
+#define PROJECTION_SCREEN_MAX 0x5Cu
+#define PROJECTION_FOV        0x184u
+#define GUESTF(va) (*(float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+void sub_001D1C00(void)
+{
+    uint32_t self = g_ecx;
+    float wide = pc_controls_view_wide();
+    float width = GUESTF(self + PROJECTION_SCREEN_MAX) - GUESTF(self + PROJECTION_SCREEN_MIN);
+    float height = GUESTF(self + PROJECTION_SCREEN_MAX + 4) - GUESTF(self + PROJECTION_SCREEN_MIN + 4);
+    float fov = GUESTF(self + PROJECTION_FOV), aspect = GUESTF(self + PROJECTION_ASPECT);
+    if (wide <= 1.001f || width < 600.0f || height < 450.0f || fov <= 0.0f || fov >= 179.0f) {
+        sub_001D1C00_gen();
+        return;
+    }
+    double half = fov * 0.5 * 3.14159265358979323846 / 180.0;
+    GUESTF(self + PROJECTION_FOV) = (float)(2.0 * atan(tan(half) * wide) * 180.0 / 3.14159265358979323846);
+    GUESTF(self + PROJECTION_ASPECT) = aspect / wide;
+    sub_001D1C00_gen();
+    GUESTF(self + PROJECTION_FOV) = fov;
+    GUESTF(self + PROJECTION_ASPECT) = aspect;
 }
 
 /* XDK 4928's idle-voice notifier looks up the owner at DirectSound +0x328.

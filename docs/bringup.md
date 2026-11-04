@@ -1327,3 +1327,64 @@ Final Release executable SHA-256:
 `4D12FF74DE8DCDB987B8870660F3D50F733E13457B6B60FC3EE08EE62D6C4A6D`.
 The earlier lighting and Quit corrections remain included; existing open issues
 are unchanged.
+
+## 2026-11-04: review fixes, movie skipping and widescreen (Claude Code)
+
+Follows the review of Codex's 2026-11-02..04 work. Toolkit `8f66f81`, `f755258`.
+
+### Review fixes
+
+- **PC controls off the main thread.** `pc_controls_frame` ran from both
+  presenter call sites, and `0x001A95B8` (inside `sub_001A9160`) is also used by
+  the boot-movie worker, so a key press with a menu active during a movie could
+  run Sam's menu handler `0x0002B588` on that thread. It now records the main
+  thread in `pc_controls_load` and does nothing on any other.
+- **Occlusion reports are bounded.** Fences wait for earlier ZPASS reports;
+  a report unfinished after 250 ms now counts as a whole 640x480 screen visible
+  (the runtime's old fixed answer) and logs `occlusion query unfinished`. If the
+  boot-movie fence stall comes back, check for that line first.
+- **16-bit clear colours and Turok.** Not testable here without working in the
+  Turok trees. NV2A clears with the value packed in the target's format (xemu
+  decodes it that way for R5G6B5; Sam's driver writes a packed `0xCCC0`), so every
+  XDK's D3D packs it and Codex's change is right for Turok too. Turok's only
+  16-bit targets are depth-only shadow maps, so a colour clear has no visible
+  effect there. Merging into `turok-evolution` should still be followed by a
+  look at Turok's shadows.
+- **`pc_controls.c` style and layout.** Reformatted (clang-format, no functional
+  change: `f6c04e9`), and every menu field it pokes is named in one block.
+  `layout_ok()` checks the cloned templates (button and page vtables in `.rdata`
+  pointing at code) and disables the PC pages with a log line if not.
+- `RECOMP_KBM_MAP` / `RECOMP_KBM_MENU_MAP` are only defaulted, so the environment
+  can override them.
+- `KeGetCurrentThread` returns the caller's KTHREAD (`fs:[0x28]`) instead of 0.
+
+### Movie skipping
+
+Escape, Enter, Space or a left click pulses Start while `xbox_VideoActive()`
+(textured-quad movie or PVIDEO). The first try hooked the vblank wait
+`sub_003041E0`, but the boot movie's frames did not pass through it while the
+key was held (`RECOMP_KEY_TRACE` showed the injected key; the hook never saw it),
+so a 10 ms thread in `pc_controls.c` does the check instead. Verified with
+`RECOMP_INPUT_FILE`: Enter at 6 s and Space at 11 s skipped both boot movies and
+the main menu was up at 13 s instead of ~40 s.
+
+### Widescreen (Hor+)
+
+`CPerspectiveProjection3D::Prepare` is `sub_001D1C00` (the only function with
+both `fptan` and `fpatan`): FOV width at `+0x184` (degrees), pixel aspect at
+`+0x64`, screen box at `+0x54..+0x60`. Its wrapper widens the FOV through its
+tangent and divides the aspect by the same factor for full-screen views only,
+then restores both, so the engine culls and projects for the wide view and its
+FOV logic is unchanged. The toolkit's `nv2a_gpu_set_wide_title_fov(1)` keeps
+those 3D draws' projection and only stretches them across the wide targets.
+
+Found on the way and fixed in the toolkit: Sam draws its HUD and text through
+the transform with an orthographic projection, which was being stretched; in
+this mode a projection with no depth in its w row is treated as 2D. Line and
+point primitives (the pause menu's outline) were never squeezed at all.
+
+Verified at Aspect "Auto" on the 3440x1440 monitor (factor 1.792): Hatshepsut
+fills the width with geometry at the edges, the enemy and revolver keep their
+proportions, the HUD, pause menu and its outline sit in the middle 4:3. The
+front end stays 4:3 (pillarboxed). About 180-250 fps in the first scene. Only
+the first level has been looked at.

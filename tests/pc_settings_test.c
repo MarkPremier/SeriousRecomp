@@ -11,6 +11,8 @@ void xbox_SetPresentInterval(int value){interval=value;}
 int xbox_GetPresentInterval(void){return interval;}
 void xbox_SetFrameLimit(int value){limit=value;}
 int xbox_GetFrameLimit(void){return limit;}
+static float window_aspect;
+void xbox_FramebufferSetWindowAspect(float value){window_aspect=value;}
 int main(void)
 {
     char temp[MAX_PATH],path[MAX_PATH],text[64];
@@ -21,6 +23,12 @@ int main(void)
     WritePrivateProfileStringA("pc_controls","fire","F",path);
     pc_settings_load(path);
     CHECK(scale==0 && anisotropy==16 && samples==1 && !interval && !limit && !want_fullscreen);
+    CHECK(choices[PC_ASPECT]==COUNT(aspects)-1 && pc_settings_aspect()>=4.0f/3 && window_aspect==pc_settings_aspect());
+    choices[PC_ASPECT]=COUNT(aspects)-1;
+    pc_settings_step(PC_ASPECT,1);CHECK(fabsf(pc_settings_aspect()-4.0f/3)<1e-6f && window_aspect==pc_settings_aspect());
+    pc_settings_step(PC_ASPECT,-1);pc_settings_step(PC_ASPECT,-1);
+    CHECK(fabsf(pc_settings_aspect()-64.0f/27)<1e-6f); /* 21:9 */
+    pc_settings_value(PC_ASPECT,text,sizeof text);CHECK(!strcmp(text,"21:9"));
     pc_settings_step(PC_RESOLUTION,1);CHECK(scale==1);
     pc_settings_step(PC_RESOLUTION,1);CHECK(scale==2);
     pc_settings_step(PC_AA,1);CHECK(samples==2);
@@ -34,6 +42,7 @@ int main(void)
     actual_fullscreen=1;pc_settings_poll();CHECK(choices[PC_DISPLAY]==1);
     actual_fullscreen=0;pc_settings_poll();CHECK(choices[PC_DISPLAY]==0); /* Alt+Enter */
     pc_settings_load(path);CHECK(scale==2 && samples==4 && anisotropy==8 && limit==60 && interval==1);
+    CHECK(fabsf(pc_settings_aspect()-64.0f/27)<1e-6f); /* the aspect persists */
     GetPrivateProfileStringA("pc_controls","fire","",text,sizeof text,path);CHECK(!strcmp(text,"F"));
     _putenv_s("RECOMP_RENDER_SCALE","5");_putenv_s("RECOMP_FPS_CAP","75");_putenv_s("RECOMP_VSYNC","0");
     pc_settings_load(path);CHECK(scale==5 && limit==75 && interval==0);

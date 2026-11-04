@@ -17,10 +17,15 @@ extern void xbox_SetPresentInterval(int interval);
 extern int xbox_GetPresentInterval(void);
 extern void xbox_SetFrameLimit(int hz);
 extern int xbox_GetFrameLimit(void);
+extern void xbox_FramebufferSetWindowAspect(float aspect);
 
 static const char *const resolutions[] = {"Auto",        "640 x 480",   "1280 x 960",
                                           "1920 x 1440", "2560 x 1920", "2880 x 2160"};
 static const float scales[] = {0, 1, 2, 3, 4, 4.5f};
+/* As Turok's Video Options: "Auto" is the monitor's shape. 21:9 is the
+ * marketing name of 64:27 (2560x1080); 3440x1440 monitors are 43:18. */
+static const char *const aspects[] = {"4:3", "16:10", "16:9", "21:9", "Auto"};
+static const float aspect_ratios[] = {4.0f / 3, 16.0f / 10, 16.0f / 9, 64.0f / 27, 0};
 static const char *const displays[] = {"Windowed", "Fullscreen"};
 static const char *const switches[] = {"Off", "On"};
 static const char *const frames[] = {"Unlimited", "30", "60", "120", "144", "200", "240", "VBlank"};
@@ -34,6 +39,7 @@ static const struct {
     int count, fallback;
 } settings[] = {
         {"resolution", "Resolution", resolutions, COUNT(resolutions), 0},
+        {"aspect", "Aspect ratio", aspects, COUNT(aspects), COUNT(aspects) - 1},
         {"display", "Display", displays, COUNT(displays), 0},
         {"vsync", "VSync", switches, COUNT(switches), 0},
         {"frame_limit", "Frame limit", frames, COUNT(frames), 0},
@@ -97,12 +103,31 @@ void pc_settings_value(int row, char *out, size_t size)
         snprintf(out, size, "%s", settings[row].values[choices[row]]);
 }
 
+float pc_settings_aspect(void)
+{
+    float ratio = aspect_ratios[choices[PC_ASPECT]];
+    if (!ratio) {
+        /* The monitor the game window is on (the primary one before it opens). */
+        DEVMODEA mode = {.dmSize = sizeof mode};
+        if (EnumDisplaySettingsA(NULL, ENUM_CURRENT_SETTINGS, &mode) && mode.dmPelsHeight)
+            ratio = (float)mode.dmPelsWidth / (float)mode.dmPelsHeight;
+    }
+    /* Never narrower than the game's own 4:3, nor wider than the runtime's
+     * widest targets (four times 4:3). */
+    if (!(ratio >= 4.0f / 3)) ratio = 4.0f / 3;
+    if (ratio > 16.0f / 3) ratio = 16.0f / 3;
+    return ratio;
+}
+
 static void apply_setting(int row)
 {
     switch (row) {
     case PC_RESOLUTION:
         nv2a_gpu_set_render_scale(custom_scale >= 0 ? custom_scale : scales[choices[row]]);
         break;
+    /* Applied per frame by pc_controls_frame, which knows the front end
+     * (kept 4:3) from a level; here only the window's shape follows. */
+    case PC_ASPECT: xbox_FramebufferSetWindowAspect(pc_settings_aspect()); break;
     case PC_DISPLAY: xbox_FramebufferSetFullscreen(choices[row]); break;
     case PC_VSYNC: xbox_SetPresentInterval(choices[row]); break;
     case PC_FRAMES: xbox_SetFrameLimit(custom_hz >= 0 ? custom_hz : frame_hz[choices[row]]); break;

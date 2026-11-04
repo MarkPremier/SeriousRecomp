@@ -49,8 +49,10 @@ your own disc image, and the C code is generated from it on your machine.
 - Keyboard/mouse controls are enabled by default. **Options > PC Controls** is
   available from the main menu and the gameplay pause menu, with rebinding,
   mouse speed, invert Y and remembered settings. Xbox input remains available.
-- **Options > PC Settings** controls render resolution, fullscreen, VSync,
-  frame limit, anisotropic filtering and MSAA, with live changes and saved choices.
+- **Options > PC Settings** controls render resolution, aspect ratio
+  (widescreen and ultrawide, Hor+), fullscreen, VSync, frame limit,
+  anisotropic filtering and MSAA, with live changes and saved choices.
+- Escape, Enter, Space or a left click skips the intro and other movies.
   Options rows, including the PC entries, retain the original alternating
   left/right slide-in animation.
 - The main menu includes **Quit Game**, with a confirmation that defaults to No.
@@ -246,6 +248,7 @@ Mouse speed (1–10), invert Y and Restore defaults are on the same page.
 | Third-person view | H |
 | Pause / Start | Escape |
 
+Escape, Enter, Space or a left click skips a movie, as Start does on a pad.
 Menus always keep arrows/WASD, Enter/Space to select and Escape/Backspace to
 return, independently of gameplay bindings. Escape also supplies Start at the
 loading screen's “press START” prompt. Click the game window to capture the
@@ -266,15 +269,23 @@ and are saved in `[pc_settings]` in `serious_sam_settings.ini` beside the exe.
 | Setting | Choices |
 |---|---|
 | Render resolution | Auto, 640×480, 1280×960, 1920×1440, 2560×1920, 2880×2160 |
+| Aspect ratio | 4:3, 16:10, 16:9, 21:9, Auto (the monitor's shape) |
 | Display | Windowed, borderless fullscreen; Alt+Enter also updates the page |
 | VSync | Off, On |
 | Frame limit | Unlimited, 30, 60, 120, 144, 200, 240, VBlank |
 | Anisotropic filtering | Game default, 2×, 4×, 8×, 16× |
 | Anti-aliasing | Off, 2×, 4×, 8× MSAA |
 
-Defaults retain automatic resolution, windowed display, VSync off and unlimited
-gameplay, with 16× AF and MSAA off. The separate 200 fps movie limit remains.
-Resolution sets internal rendering size; the view keeps its original 4:3 shape.
+Defaults retain automatic resolution and aspect, windowed display, VSync off
+and unlimited gameplay, with 16× AF and MSAA off. The separate 200 fps movie
+limit remains. Resolution sets the internal rendering height; the width follows
+the aspect ratio.
+
+Widescreen is Hor+: the vertical view is the console's
+and more is shown at the sides, with the world culled for the wider view, so
+nothing is missing at the edges. The HUD, menus, text and movies keep their 4:3
+shape in the middle. The front end (main menu and its pages) stays 4:3; a level
+and its pause menu use the chosen aspect.
 Explicit `RECOMP_RENDER_SCALE`, `RECOMP_VSYNC` and `RECOMP_FPS_CAP` overrides win
 at launch and appear on the page. `RECOMP_PC_SETTINGS_FILE` selects a private
 graphics INI for tests; otherwise the controls INI path is shared.

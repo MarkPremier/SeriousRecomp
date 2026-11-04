@@ -33,6 +33,13 @@ void xbox_KbmSetBinding(const char *target,const int *binding,int count){(void)t
 void xbox_KbmPulse(const char *target,int ms){CHECK(!strcmp(target,"START"));if(ms)++start_pulses;}
 int xbox_KbmInputDown(int key){return key>=0 && key<0x108?down[key]:0;}
 int xbox_KbmMenuWheel(void){int n=wheel;wheel=0;return n;}
+static int video_active;
+static DWORD WINAPI frame_on_worker(LPVOID unused){(void)unused;pc_controls_frame();pc_controls_movie_frame();return 0;}
+int xbox_VideoActive(void){return video_active;}
+static float wide_set=1;
+void nv2a_gpu_set_wide_factor(float factor){wide_set=factor;}
+void nv2a_gpu_set_wide_title_fov(int on){(void)on;}
+float pc_settings_aspect(void){return 64.0f/27;}
 int xbox_FramebufferKeyDown(int key){return xbox_KbmInputDown(key);}
 int xbox_FramebufferMouseButton(int button){(void)button;return 0;}
 int xbox_FramebufferMouseClicks(int button){int n=clicks[button];clicks[button]=0;return n;}
@@ -81,6 +88,7 @@ static void options_animation_test(void)
 int main(void)
 {
     char temp[MAX_PATH],path[MAX_PATH],label[64];
+    _putenv_s("RECOMP_PC_CONTROLS_NO_THREAD","1"); /* the skip checks below drive it directly */
     GetTempPathA(sizeof temp,temp);
     snprintf(path,sizeof path,"%ssam_controls_%lu.ini",temp,GetCurrentProcessId());
     _putenv_s("RECOMP_PC_CONTROLS_FILE",path);
@@ -179,6 +187,25 @@ int main(void)
     px=201;quit_frame();CHECK(quit_selected==0);
     px=300;clicks[0]=1;quit_frame();CHECK(quits==1); /* gap between buttons */
     px=200;clicks[0]=1;quit_frame();CHECK(quits==2);
+    /* Movies are skipped from a thread of the file's own: a skip key there
+     * pulses Start once per press, and Sam's menu code never runs off the
+     * main thread (pc_controls_frame from another thread does nothing). */
+    {
+        int before_pulses=start_pulses,before_events=menu_events;
+        HANDLE worker;
+        memset(down,0,sizeof down);
+        pc_controls_frame(); /* release everything on the main thread first */
+        WORD(ACTIVE_MENU)=page;video_active=1;down[VK_RETURN]=1;down[VK_DOWN]=1;
+        worker=CreateThread(NULL,0,frame_on_worker,NULL,0,NULL);
+        WaitForSingleObject(worker,INFINITE);CloseHandle(worker);
+        CHECK(start_pulses==before_pulses+1 && menu_events==before_events);
+        worker=CreateThread(NULL,0,frame_on_worker,NULL,0,NULL);
+        WaitForSingleObject(worker,INFINITE);CloseHandle(worker);
+        CHECK(start_pulses==before_pulses+1); /* held, not pressed again */
+        down[VK_RETURN]=0;video_active=0;pc_controls_movie_frame();
+        down[VK_SPACE]=1;pc_controls_movie_frame();CHECK(start_pulses==before_pulses+1); /* no video, no skip */
+        down[VK_SPACE]=0;down[VK_DOWN]=0;
+    }
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }
