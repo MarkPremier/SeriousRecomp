@@ -1710,3 +1710,12 @@ Installed Release SHA-256:
   (`[DSOUND] dropped queued work ... vtable 003BCCE8`) and kept running. The
   queue-time log did not fire, so the voice was destroyed while queued; the
   console's DPC would have run first. Unit test in `tests/dsound_idle_test.c`.
+- **End-of-level statistics drawn wide (fixed).** The user's log showed the
+  view staying 1.78x through the outro and statistics: that screen presents
+  through neither hooked vblank caller, so `wide_frame` was never re-run once
+  play stopped. `movie_thread` (10 ms) now re-runs it too, under an SRW lock
+  shared with the main thread.
+- **Sam starts Sand Canyon looking up (open).** Reproduced with no input at
+  all (level swapped in from a fresh profile), so it is not accumulated mouse
+  movement; Hatshepsut starts level. Not yet known whether the original does
+  the same.

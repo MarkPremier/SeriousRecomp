@@ -762,11 +762,14 @@ void pc_controls_movie_frame(void)
     }
 }
 
+static void wide_frame(void);
+
 static DWORD WINAPI movie_thread(LPVOID unused)
 {
     (void)unused;
     for (;;) {
         pc_controls_movie_frame();
+        wide_frame();
         Sleep(10);
     }
 }
@@ -784,7 +787,20 @@ float pc_controls_view_wide(void)
     return view_wide;
 }
 
+/* Called on the main thread every frame it presents through a hooked path,
+ * and from movie_thread: NETRICSA's end-of-level statistics present through
+ * neither vblank hook, so play's widescreen stayed on there. */
+static SRWLOCK wide_lock = SRWLOCK_INIT;
+
+static void wide_frame_locked(void);
 static void wide_frame(void)
+{
+    AcquireSRWLockExclusive(&wide_lock);
+    wide_frame_locked();
+    ReleaseSRWLockExclusive(&wide_lock);
+}
+
+static void wide_frame_locked(void)
 {
     static int in_level;
     static uint32_t last_menu = 1;
