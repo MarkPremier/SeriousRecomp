@@ -109,6 +109,11 @@ if(MSVC)
         /LARGEADDRESSAWARE
         /MAP
         /DYNAMICBASE:NO
+        # Every thread's native stack (all are created with the default size).
+        # A translated guest frame is several times the original's, and deep
+        # loads ran out of 1 MB: a stack overflow loading Sand Canyon after
+        # Hatshepsut. Reserved address space only; pages commit as used.
+        /STACK:16777216
     )
     # The generated code files can be very large. Increase object file section limit.
     target_compile_options(${PROJECT_NAME} PRIVATE /bigobj)

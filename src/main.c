@@ -232,7 +232,8 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
 {
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_INT_DIVIDE_BY_ZERO ||
         ep->ExceptionRecord->ExceptionCode == EXCEPTION_INT_OVERFLOW ||
-        ep->ExceptionRecord->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION) {
+        ep->ExceptionRecord->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION ||
+        ep->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
         fprintf(stderr, "[CRASH] Exception 0x%08lX at RIP=0x%llX\n",
             (unsigned long)ep->ExceptionRecord->ExceptionCode,
             (unsigned long long)ep->ContextRecord->Rip);
@@ -398,6 +399,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     (void)nCmdShow;
 
     install_crash_log();
+    {   /* Room for the crash log to run after a stack overflow. */
+        ULONG guarantee = 64 * 1024;
+        SetThreadStackGuarantee(&guarantee);
+    }
 
     /* Boot probes must finish without waiting on a Windows crash dialog.
      * The VEH below still records the exception and guest state. */

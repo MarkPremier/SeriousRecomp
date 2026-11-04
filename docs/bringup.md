@@ -1678,3 +1678,19 @@ Installed Release SHA-256:
 - `tests/nv2a_clear` (`nv2a_clear_gpu`) fails here with the D3D device
   removed on an occlusion-query read (0x887A0005 / 0x887A0020), identically
   on the committed toolkit, so it predates these changes. `nv2a_zpass` passes.
+- **Stack overflow after Hatshepsut (user report).** The log ends with
+  `0xC00000FD` (native stack overflow) while Sand Canyon's background textures
+  load, just after loader thread `0x3E45A` (ctx `0x1DAB60`) was created.
+  Every thread had the default 1 MB reserve, but after the Hatshepsut load the
+  deepest thread had committed only 100 KB (scratchpad `stackdepth.ps1`). So
+  this was probably runaway recursion, not just a deep load. Loading Sand
+  Canyon from the menu on the old build (level name swapped in memory,
+  `memswap.ps1`) did not crash; the user's crash came from the in-level
+  transition. The exe now reserves 16 MB per thread (`/STACK`). Main and guest
+  threads keep 64 KB for the handler, and the VEH logs `EXCEPTION_STACK_OVERFLOW`
+  with the guest call chain, so a repeat shows where it recursed.
+- Shadow cut off at a straight edge (user screenshot, pool room): not yet
+  compared with hardware. Apart from Codex's fixed `rol`/`adc`, the light
+  mixers' only carry idiom is `neg`/`sbb`, translated correctly (checked
+  `0x293000-0x296800`). The other `sub`/`sbb`/`add`/`adc` there is 64-bit
+  timer arithmetic, and the `cmc` is a jump table read as code.
