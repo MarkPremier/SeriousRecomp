@@ -807,12 +807,22 @@ static void wide_frame(void)
 #define SHORTCUT_BUTTON    0xB0u /* ASCII controller button */
 #define SHORTCUT_ICON_LEFT 0xC0u
 #define MAX_MENU_GADGETS   64
+static uint32_t hovered_shortcut, hovered_shortcut_menu;
 extern void sub_00028A11(void);
 extern void (*recomp_lookup(uint32_t va))(void);
 
 static int guest_object(uint32_t va)
 {
     return va >= 0x10000 && va < 0x08000000;
+}
+
+int pc_controls_shortcut_hovered(uint32_t gadget)
+{
+    int x, y, w, h;
+    return enabled && GetCurrentThreadId() == main_thread && guest_object(gadget) &&
+           gadget == hovered_shortcut && shown_menu() == hovered_shortcut_menu &&
+           WORD(gadget + GADGET_VISIBLE) && WORD(gadget + GADGET_ENABLED) &&
+           xbox_FramebufferPointer(&x, &y, &w, &h);
 }
 
 static uint32_t virtual_call(uint32_t object, uint32_t slot, const uint32_t *args, unsigned count)
@@ -966,7 +976,6 @@ static void menu_key(uint32_t key)
 static void native_mouse_frame(void)
 {
     static int last_x = -1, last_y = -1;
-    static uint32_t hovered_shortcut;
     uint32_t menu = shown_menu(), buttons[MAX_MENU_GADGETS], focused, hit;
     uint32_t shortcuts[MAX_MENU_GADGETS];
     int x, y, w, h, n;
@@ -974,6 +983,7 @@ static void native_mouse_frame(void)
     int click = xbox_FramebufferMouseClicks(0), right = xbox_FramebufferMouseClicks(1);
     int wheel = xbox_KbmMenuWheel();
     if (!xbox_FramebufferPointer(&x, &y, &w, &h)) {
+        hovered_shortcut = hovered_shortcut_menu = 0;
         if ((click || right) && getenv("RECOMP_MENU_MOUSE_TRACE"))
             fprintf(stderr, "[MENU MOUSE] menu %08X: no pointer\n", menu);
         return;
@@ -995,6 +1005,7 @@ static void native_mouse_frame(void)
     uint32_t shortcut = button_at(shortcuts, shortcut_count, gx, gy);
     if (shortcut && shortcut != hovered_shortcut) menu_change_sound();
     hovered_shortcut = shortcut;
+    hovered_shortcut_menu = menu;
     if (shortcut) {
         if (click) menu_key(shortcut_key(shortcut));
         else if (right) menu_key(VK_ESCAPE);
@@ -1024,6 +1035,7 @@ static void native_mouse_frame(void)
 void pc_controls_frame(void)
 {
     if (GetCurrentThreadId() != main_thread) return;
+    if (!enabled || shown_menu() != hovered_shortcut_menu) hovered_shortcut = hovered_shortcut_menu = 0;
     wide_frame();
     if (quit_entry) WORD(quit_entry + GADGET_VISIBLE) = shown_menu() == MAIN_MENU;
     if (quit_entry && shown_menu() == MAIN_MENU) {

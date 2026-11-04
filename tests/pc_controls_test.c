@@ -157,6 +157,8 @@ static void native_mouse_test(void)
     ++px;native_mouse_frame();CHECK(sounds==before+1); /* motion within a row is silent */
     for(int i=0;i<4;++i){
         px=icons[i];py=430;before=sounds;native_mouse_frame();CHECK(sounds==before+1);
+        CHECK(pc_controls_shortcut_hovered(footer[i]) && !pc_controls_shortcut_hovered(row));
+        CHECK(!WORD(footer[i]+GADGET_FOCUSED)); /* animation must not steal keyboard focus */
         CHECK(WORD(next+GADGET_FOCUSED)); /* shortcut hover retains the selected profile */
         int previous_events=menu_events;
         clicks[0]=1;native_mouse_frame();CHECK(menu_events==previous_events+1 && last_menu_key==events[i]);
@@ -174,6 +176,9 @@ static void native_mouse_test(void)
     WORD(row+GADGET_ENABLED)=0;
     CHECK(menu_buttons(menu,found,&focused)==2); /* disabled rows must not sever the navigation graph */
     px=20;py=430;clicks[0]=1;native_mouse_frame();CHECK(menu_events==before); /* outside all buttons */
+    for(int i=0;i<4;++i)CHECK(!pc_controls_shortcut_hovered(footer[i]));
+    px=100;py=430;native_mouse_frame();CHECK(pc_controls_shortcut_hovered(footer[0]));
+    pointer_on=0;native_mouse_frame();CHECK(!pc_controls_shortcut_hovered(footer[0]));
     WORD(menu+SCREEN_GADGETS)=0;WORD(ACTIVE_MENU)=0;pointer_on=0;
 }
 

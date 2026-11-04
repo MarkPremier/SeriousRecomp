@@ -3,6 +3,15 @@
 #include <xbox/xboxrecomp.h>
 extern RECOMP_TLS uint32_t g_esp;
 unsigned pc_frame_calls,pc_menu_draw_calls;
+uint32_t pc_hovered_shortcut,pc_text_effect;
+unsigned pc_text_calls;
+int pc_controls_shortcut_hovered(uint32_t gadget) {return gadget && gadget==pc_hovered_shortcut;}
+void sub_0002A089_gen(void) {
+    extern ptrdiff_t g_xbox_mem_offset;
+    ++pc_text_calls;
+    pc_text_effect=*(uint32_t *)((uintptr_t)g_xbox_mem_offset+g_esp+0x1C);
+    g_esp+=4;
+}
 void pc_controls_build_menu(void) {}
 void pc_controls_options_layout(void) {}
 void pc_controls_frame(void) {++pc_frame_calls;}

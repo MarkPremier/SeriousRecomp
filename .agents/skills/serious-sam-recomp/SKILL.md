@@ -16,6 +16,16 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-04)
 
+- **Footer hover animation:** the `0x2A089` text-draw wrapper enables Sam's
+  original selected-glyph wave only for hovered footer labels. Return addresses
+  `0x1CCC1` / `0x1CE15` identify the left/right footer renderer branches, whose
+  `this` is saved at guest EBP-0x50. The seventh argument (ESP+0x1C) is 1.0 only
+  during that draw and is restored afterward. Main-thread hover tracking
+  rejects other pages, hidden/disabled hints and a pointer outside the window.
+  Do not set footer `GADGET_FOCUSED`: that would replace the selected profile.
+  The unchanged generated `2A089` body is named `_gen`; full regeneration must
+  keep `--exclude-manual src/recomp_manual.c` as for the other wrappers.
+
 - **Mouse footer and hover sounds (Codex):** `0x3A9F34` gadgets are A/B/X/Y
   shortcuts, separate from the focus-navigation graph. Their ASCII button at
   `+0xB0` maps to native menu keys Enter/Escape/`0xA8C`/`0xAF0`; keep the

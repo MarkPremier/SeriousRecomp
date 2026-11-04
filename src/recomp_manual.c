@@ -27,6 +27,7 @@ extern void sub_00030710_gen(void);
 extern void sub_00030D00_gen(void);
 extern void sub_00070810_gen(void);
 extern void sub_0002B6BE_gen(void);
+extern void sub_0002A089_gen(void);
 extern void sub_001D1C00_gen(void);
 extern int xbox_GetPresentInterval(void);
 extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_ebx, g_esi, g_edi;
@@ -76,6 +77,21 @@ void sub_0002B6BE(void)
     pc_controls_menu_drawn();
     pc_controls_frame();
     sub_0002B6BE_gen();
+}
+
+/* Footer labels normally pass zero for the selected-text wave. Reuse Sam's
+ * own glyph animation for the hovered shortcut without giving it focus or
+ * moving the selected profile. Both footer renderer branches keep `this`
+ * at EBP-0x50; only their calls may change this seventh text-draw argument. */
+void sub_0002A089(void)
+{
+    uint32_t caller = GUEST32(g_esp);
+    uint32_t argument = g_esp + 0x1C, saved = GUEST32(argument);
+    if ((caller == 0x0001CCC1u || caller == 0x0001CE15u) && g_ebp >= 0x10050u &&
+        g_ebp < 0x08000000u && pc_controls_shortcut_hovered(GUEST32(g_ebp - 0x50)))
+        GUEST32(argument) = 0x3F800000u;
+    sub_0002A089_gen();
+    GUEST32(argument) = saved;
 }
 
 /* Widescreen (Hor+). CPerspectiveProjection3D::Prepare builds the view's

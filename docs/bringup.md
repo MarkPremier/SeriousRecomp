@@ -1556,3 +1556,40 @@ override), a sparse private save copy and private PC settings. It found
 actions. This verifies startup/page rendering, not physical mouse clicks.
 The test process was stopped after capture. Installed Release SHA-256:
 `097F9A1C9AF38B3054F77A3A68FF92ACE01B9E6CF6BADB756A7C48CA481E91EC`.
+
+## 2026-11-04: animate footer lettering on hover
+
+Clickable footer shortcuts now reuse the game's selected-text glyph animation.
+The original footer renderer always passed zero for the wave strength, even
+though the same text drawing code renders animated normal menu rows. A wrapper
+around `sub_0002A089` changes the seventh argument to 1.0 only at the two footer
+renderer return addresses (`0x1CCC1`, `0x1CE15`), and only when its saved gadget
+(guest EBP-0x50) is the hovered shortcut on the shown page. The original argument
+is restored after drawing. Native glyph motion, font, colors and clock remain
+in the original game code; no separate animation timer is introduced.
+
+Hover state is now shared with that renderer check. It clears when the mouse
+leaves the window or the active page changes and rejects hidden/disabled hints
+and non-main-thread calls. The profile selector keeps focus: marking a footer
+focused would make keyboard/controller handling operate on the shortcut instead
+of the selected profile.
+
+Seven title tests pass. The presentation test verifies the actual wrapper's two
+footer call sites, untouched ordinary text calls, hovered/unhovered arguments,
+restored arguments and guest stack. Controls tests cover hover state and pointer
+exit alongside the prior footer clicks and preserved selection. The existing
+generated text body was retained unchanged and renamed `sub_0002A089_gen` for
+the wrapper. The generator's full-build `--exclude-manual` path emits that name
+from its exact extern declaration; single-function `-f` prints the unwrapped
+body instead, so it must not replace the installed wrapped symbol directly.
+No generated game code or assets are committed.
+
+Normal-discovery verification used private saves/settings and reached Select
+Player (`analysis/footer_hover_verify/no_hover.bmp`, a runtime framebuffer
+export). The user reported "Seems to work" during final verification. The
+seven tests above establish the hover routing and renderer arguments; no
+physical mouse automation or captured animation sequence is claimed. The
+isolated test process was closed after the check. Original saves/settings,
+Claude's pending diagnostic block and all Turok trees remain untouched.
+Installed Release SHA-256:
+`CF8B8103D9B2DC1C29BD5C56C91381F18DD0C390F4BEAE8DD23237161CF6BC4A`.
