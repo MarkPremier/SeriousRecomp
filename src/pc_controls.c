@@ -769,7 +769,9 @@ static DWORD WINAPI movie_thread(LPVOID unused)
     (void)unused;
     for (;;) {
         pc_controls_movie_frame();
-        wide_frame();
+        /* Only once the title runs: this thread starts before guest memory. */
+        if (InterlockedCompareExchange(&menu_draw_seen, 0, 0) || InterlockedCompareExchange(&action_seen, 0, 0))
+            wide_frame();
         Sleep(10);
     }
 }
@@ -1393,6 +1395,15 @@ int pc_controls_input_begin(uint32_t profile)
     }
     int dx = 0, dy = 0;
     xbox_FramebufferMouseDelta(&dx, &dy);
+    /* The delta piles up whenever this does not run -- NETRICSA pages, the
+     * outro, loading -- and the first tick back in play turned Sam by all of
+     * it: steering the pointer to Continue on the statistics started the
+     * next level looking at the pitch limit (and the level-start autosave
+     * kept it). Movement from before play resumed is not look input. */
+    static DWORD last_look;
+    DWORD now = GetTickCount();
+    if (now - last_look > 250) dx = dy = 0;
+    last_look = now;
     /* ctl_fTurn* are angles, not stick deflections. Cancel the console
      * profile's sensitivity/invert here, then let Sam build the normal action.
      * Equal mouse counts turn equally at 50 or 300 fps, without a stick cap. */

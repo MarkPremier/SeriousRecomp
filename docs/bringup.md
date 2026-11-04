@@ -1715,7 +1715,21 @@ Installed Release SHA-256:
   through neither hooked vblank caller, so `wide_frame` was never re-run once
   play stopped. `movie_thread` (10 ms) now re-runs it too, under an SRW lock
   shared with the main thread.
-- **Sam starts Sand Canyon looking up (open).** Reproduced with no input at
-  all (level swapped in from a fresh profile), so it is not accumulated mouse
-  movement; Hatshepsut starts level. Not yet known whether the original does
-  the same.
+- **Sam starts a level looking up (fixed; user confirmed the original looks
+  ahead).** `WorldChange` (Xbox `sub_0007D120`, as in the PC source) keeps the
+  player's view angles (`en_plViewpoint` at player `+0x344`: angles `+0x350`,
+  pitch `+0x354`). Mouse deltas pile up while the action builder is not running
+  (NETRICSA pages, outro, loading), and `pc_controls_input_begin` then applied
+  them all on the first tick, slamming the pitch to the console limit (45.05,
+  kept by the level-start autosave). Deltas older than 250 ms of not running are
+  now discarded. Verified in an isolated game folder: mouse moved during the
+  Hatshepsut briefing started the level looking up on the old build and level
+  on the new one. The "no input" repro earlier was the user's autosave: the
+  pitch is baked into it.
+- **Test isolation.** `RECOMP_SAVE_DIR` only redirects the save partition
+  images; `UDATA` profiles live in the game folder, so earlier "fresh" runs
+  using `test_clean` loaded the user's profile (they only rewrote its 38-byte
+  `SaveMeta.xbx`). Use `analysis/iso_*` game folders (hard links plus a private
+  `UDATA`) for anything that selects a profile.
+- The 10 ms thread's widescreen check must wait for the title: it starts
+  before guest memory, and `585d135` crashed at launch (fixed the same night).
