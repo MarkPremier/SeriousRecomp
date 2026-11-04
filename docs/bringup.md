@@ -1694,3 +1694,19 @@ Installed Release SHA-256:
   mixers' only carry idiom is `neg`/`sbb`, translated correctly (checked
   `0x293000-0x296800`). The other `sub`/`sbb`/`add`/`adc` there is 64-bit
   timer arithmetic, and the `cmc` is a jump table read as code.
+- **DirectSound crash (fixed by a guard; root cause in timing).** The user hit
+  the `0x003677B3` crash at the start of Sand Canyon with the same registers as
+  `analysis/aspect_baseline`. Faulting function `sub_003643FA`, reached from
+  the DPC work loop `sub_00367741` over the pending list `+0x740`. The queued
+  object's vtable was `0x3BCCE8`, the shared base vtable a destructor restores;
+  its `+0x14` is a stdcall COM method that took the caller's saved EDI
+  (`0xFE0001B4`, the KeSynchronizeExecution thunk) as `this`. Live voices
+  carry e.g. `0x3BCDDC`/`0x3BCE00`. A wrapper on `sub_00367741` now unlinks
+  queued objects with a base vtable (`0x3BCCE8`, `0x3BCDB8`) or an invalid
+  pointer before the original runs, at the DPC's level. A wrapper on
+  `sub_00368B2C` logs a dead object being queued. Voices live in the
+  `0x80000000` contiguous window, so pointer checks accept both windows.
+  Verified: a Sand Canyon soak dropped one such voice
+  (`[DSOUND] dropped queued work ... vtable 003BCCE8`) and kept running. The
+  queue-time log did not fire, so the voice was destroyed while queued; the
+  console's DPC would have run first. Unit test in `tests/dsound_idle_test.c`.

@@ -52,6 +52,8 @@ void sub_002B78DF(void) { abort(); }
 void sub_0019D290(void) { abort(); }
 void sub_00367844_gen(void) { abort(); }
 void sub_003098A0_gen(void) { abort(); }
+void sub_00367741_gen(void) { abort(); }
+void sub_00368B2C_gen(void) { abort(); }
 void sub_00304F90(void) { abort(); }
 
 static void run(uint32_t file, uint32_t readonly, uint32_t cursor,

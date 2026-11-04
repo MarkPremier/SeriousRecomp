@@ -20,6 +20,8 @@ void sub_003098A0(void);
 /* KickOff (sub_00309700) is translated in recomp_manual.c; it publishes PUT
  * through the register block at device +0x23BC. Its wait loop runs only while
  * 0x313C4C is set, which these tests leave clear. */
+void sub_00367741_gen(void) { abort(); }
+void sub_00368B2C_gen(void) { abort(); }
 void sub_00304F90(void) { abort(); }
 void sub_003098A0_gen(void)
 {

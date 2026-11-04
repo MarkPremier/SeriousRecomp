@@ -155,6 +155,80 @@ void sub_00367844(void)
     sub_00367844_gen();
 }
 
+/* DirectSound's DPC work (sub_00367741) calls vtable +0x14 on every voice
+ * queued on its lists: +0x728/+0x730/+0x738 (node at object +0x4C) and the
+ * pending list +0x740 (node at +0x54, linked by sub_00368B2C). Twice a queued
+ * object carried 0x3BCCE8 -- the shared base vtable its destructor restores --
+ * and +0x14 there is a stdcall COM method, which took the caller's saved EDI
+ * for `this` and faulted (eax=FE0001B4, return 0x003677B3). The asynchronous
+ * APU reports voices later than the console's did, so a voice can be queued
+ * once its owner is being torn down; such an owner has no work to do.
+ * Unlink dead objects first, at the DPC's own level, and log who queued one. */
+#define DSOUND_VOICE_LISTS   0x728u
+#define DSOUND_PENDING       0x740u
+#define DSOUND_BASE_VTABLE   0x003BCCE8u
+#define VOICE_BASE_VTABLE    0x003BCDB8u
+extern void sub_00367741_gen(void);
+extern void sub_00368B2C_gen(void);
+/* Ordinary RAM, or the contiguous window at 0x80000000 where DirectSound
+ * keeps its voices (both map the same 128 MB). */
+static int guest_ptr(uint32_t va, uint32_t bytes)
+{
+    uint32_t ram = va & 0x7FFFFFFFu;
+    return (va < 0x08000000u || (va >= 0x80000000u && va < 0x88000000u)) &&
+           ram >= 0x10000u && ram <= 0x08000000u - bytes;
+}
+
+static int dsound_dead(uint32_t object)
+{
+    uint32_t vtable;
+    if (!guest_ptr(object, 0x60)) return 1;
+    vtable = GUEST32(object);
+    return vtable == DSOUND_BASE_VTABLE || vtable == VOICE_BASE_VTABLE || !guest_ptr(vtable, 0x18);
+}
+
+static void dsound_drop_dead(uint32_t head, uint32_t node_offset)
+{
+    static unsigned dropped;
+    uint32_t node = GUEST32(head);
+    for (unsigned guard = 0; node != head && guard < 4096; ++guard) {
+        uint32_t next = GUEST32(node);
+        if (!guest_ptr(node, 8)) return; /* leave a broken list to the original */
+        if (dsound_dead(node - node_offset)) {
+            uint32_t prev = GUEST32(node + 4);
+            GUEST32(prev) = next;
+            GUEST32(next + 4) = prev;
+            GUEST32(node) = node;
+            GUEST32(node + 4) = node;
+            if (++dropped <= 8 || !(dropped & 255u))
+                fprintf(stderr, "[DSOUND] dropped queued work for a released voice %08X (vtable %08X, %u time(s))\n",
+                        node - node_offset, GUEST32(node - node_offset), dropped);
+        }
+        node = next;
+    }
+}
+
+void sub_00367741(void)
+{
+    uint32_t dsound = g_ecx;
+    if (guest_ptr(dsound, 0x800)) {
+        for (uint32_t list = 0; list < 3; ++list)
+            dsound_drop_dead(dsound + DSOUND_VOICE_LISTS + list * 8, 0x4C);
+        dsound_drop_dead(dsound + DSOUND_PENDING, 0x54);
+    }
+    g_ecx = dsound;
+    sub_00367741_gen();
+}
+
+void sub_00368B2C(void)
+{
+    static unsigned logged;
+    if (dsound_dead(g_ecx) && logged++ < 8)
+        fprintf(stderr, "[DSOUND] released voice %08X (vtable %08X) queued from 0x%08X\n",
+                g_ecx, guest_ptr(g_ecx, 4) ? GUEST32(g_ecx) : 0, GUEST32(g_esp));
+    sub_00368B2C_gen();
+}
+
 /* Writable CTFileStream pages normally enter the two-page flush window through
  * the engine's access-violation handler. Guest RAM is already committed here,
  * so that window stays empty. Publish every used page through the original
