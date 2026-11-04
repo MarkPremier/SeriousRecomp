@@ -113,6 +113,40 @@ your own disc image, and the C code is generated from it on your machine.
   compiles. This reduces repeat compilation stalls; steady scene frame rate
   still depends on the scene's work.
 
+## Playing
+
+You need your own copy of Serious Sam for the original Xbox, **USA** release.
+Keep `serious_sam_recomp.exe` and `d3dcompiler_ms.dll` together in a folder and
+start the exe:
+
+- Put your disc image (`.iso`, a full image of the disc, or a trimmed `.xiso`)
+  beside the program, and it is extracted once into a `game` folder there
+  (about 1.8 GB).
+- Or, with no image beside it, the program asks for the image or for the
+  `default.xbe` in a folder of already extracted files (`default.xbe`,
+  `Main.gro`, `Movies0.gro` to `Movies5.gro`).
+
+The folder is remembered in `serious_sam_settings.ini` beside the program, and
+the game's `default.xbe` is checked to be the USA release's (SHA-1
+`5463f81814860649ce6fae754e34d84b02ed93cb`): the recompiled code is that
+executable's, so other releases are refused. Saves go in the game folder's
+`saves`. Compiled shaders are cached in `%LOCALAPPDATA%\xboxrecomp\shadercache`,
+so the first sight of a new effect may hitch once.
+
+An Xbox/XInput controller works as on the console; keyboard and mouse work too
+(see [PC controls](#pc-controls)). **Options > PC Settings** has resolution,
+aspect ratio (widescreen/ultrawide), display mode, VSync, frame limit,
+anisotropic filtering and MSAA. Escape, Enter, Space or a click skips movies.
+The main menu has no music; that is how the original plays.
+
+If the game crashes or freezes, the details are in `serious_sam_log.txt`
+beside the program (the run before is kept as `serious_sam_log.prev.txt`).
+Please include it with any report.
+
+Known issues in this beta: only the first level has been tested in depth; a
+rare freeze during the boot movies; one crash seen after firing in Hatshepsut,
+and one when DirectSound shuts down.
+
 ## What you need
 
 - An original Xbox disc image of Serious Sam (USA), XISO format

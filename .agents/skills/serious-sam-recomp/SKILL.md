@@ -16,6 +16,10 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state (2026-11-04)
 
+- **The main menu has no music on original hardware** (confirmed by the user,
+  2026-11-04). Silence there is correct; do not chase it. Menu static before
+  `RECOMP_APU_NO_REDIR` was a level-music voice reading the graphics bank.
+
 - **Footer hover animation:** the `0x2A089` text-draw wrapper enables Sam's
   original selected-glyph wave only for hovered footer labels. Return addresses
   `0x1CCC1` / `0x1CE15` identify the left/right footer renderer branches, whose
