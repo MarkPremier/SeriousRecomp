@@ -1689,8 +1689,8 @@ Installed Release SHA-256:
   transition. The exe now reserves 16 MB per thread (`/STACK`). Main and guest
   threads keep 64 KB for the handler, and the VEH logs `EXCEPTION_STACK_OVERFLOW`
   with the guest call chain, so a repeat shows where it recursed.
-- Shadow cut off at a straight edge (user screenshot, pool room): not yet
-  compared with hardware. Apart from Codex's fixed `rol`/`adc`, the light
+- Shadow cut off at a straight edge (user screenshot, pool room): **the
+  user confirmed the original game looks the same; not a bug.** Apart from Codex's fixed `rol`/`adc`, the light
   mixers' only carry idiom is `neg`/`sbb`, translated correctly (checked
   `0x293000-0x296800`). The other `sub`/`sbb`/`add`/`adc` there is 64-bit
   timer arithmetic, and the `cmc` is a jump table read as code.
