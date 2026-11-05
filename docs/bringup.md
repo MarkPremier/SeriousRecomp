@@ -1755,3 +1755,12 @@ Installed Release SHA-256:
   `0x30B77D` is untranslated (`RECOMP_UNIMPL`), so D3D's field parity is
   undefined; harmless for progressive output. `BlockOnTime` and the
   visibility wait remain busy-waits, idle time under the frame cap.
+- Untranslated instructions the title actually reaches (`[UNIMPL]` across all
+  runs; 449 sites exist in the generated code): `cli`/`sti` at
+  `0x3A760C`/`0x3A761D`, around two reads (a voice's position word and APU
+  `0xFE80200C`) meant to be taken together. The APU ISR can land between them
+  here, a two-instruction window. Not made a real lock: an unmatched `cli`
+  would hold the APU ISR off and silence audio. `wbinvd` (`0x1D8CD5`,
+  `0x30AA22`) has nothing to flush on the host; `in`/`out` on port `0x80C0`
+  (`0x30B77D`, `0x30C6A9`) is the TV field bit, irrelevant to progressive
+  output.
