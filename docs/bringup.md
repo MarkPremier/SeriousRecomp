@@ -1778,3 +1778,12 @@ Installed Release SHA-256:
 - Floor shadows showing through brazier and torch flames (user screenshot,
   Gnaar room): the flames are additive sprites, so a darker background shows
   through them. **The user confirmed the original looks the same; not a bug.**
+- **Invisible werebull and biomech (user, Sand Canyon; likely fixed).** Their
+  shadows and effect layers drew but the bodies did not, for a whole
+  encounter; later the same enemy drew correctly. Model occlusion
+  (`sub_001CE160`) skips a model whose bounding-box test reports 0 pixels. The
+  late-answer path takes each report slot's last count, and slots are reused
+  across objects, so a model can inherit another's "hidden". A late answer for
+  a report that counted a 3D draw is now at least 1 (toolkit); flare (2D)
+  tests keep the last count. Not reproduced here: the scripted runs from the
+  user's save never brought one into view at a distance.
