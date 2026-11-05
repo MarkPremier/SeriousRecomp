@@ -21,7 +21,7 @@ extern void sub_0001AFBA(void);
 extern void xbox_KbmSetMenuMode(int on), xbox_KbmSetRawMouse(int on), xbox_KbmSetCapture(int on);
 extern void xbox_KbmSetBinding(const char *target, const int *keys, int count);
 extern void xbox_KbmPulse(const char *target, int ms);
-extern int xbox_KbmInputDown(int key), xbox_KbmMenuWheel(void);
+extern int xbox_KbmInputDown(int key), xbox_KbmMenuWheel(void), xbox_KbmWheelNotches(void);
 extern int xbox_VideoActive(void), nv2a_gpu_frames_without_3d(void);
 extern void nv2a_gpu_set_wide_factor(float factor), nv2a_gpu_set_wide_title_fov(int on);
 extern int xbox_FramebufferKeyDown(int key), xbox_FramebufferMouseButton(int button);
@@ -34,6 +34,14 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define PTR(a)      ((void *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(a)))
 #define OPTIONS     0x00472568u
 #define ACTIVE_MENU 0x0047011Cu
+/* _pGame, and its NETRICSA state (the PC source's gm_csComputerState:
+ * 0 off, 1 on, 2 turning on, 3 turning off), as NETRICSA's own code reads it. */
+#define GAME                0x0047F6C4u
+#define GAME_COMPUTER_STATE 0x0Cu
+#define COMPUTER_ON         1
+/* Set while the post-load briefing ("Please press START to continue") is up;
+ * NETRICSA's update (sub_0005F1E0) reads its pad for this or COMPUTER_ON. */
+#define BRIEFING            0x0047FE30u
 #define MOUSE1      0x101
 #define MOUSE2      0x102
 #define MOUSE3      0x103
@@ -762,6 +770,42 @@ void pc_controls_movie_frame(void)
     }
 }
 
+/* NETRICSA's own pad reader (sub_00058E20) scrolls the text with up/down on
+ * the d-pad or either stick and turns messages with left/right, repeating
+ * while held. The arrows (or W/A/S/D) hold the d-pad for as long as they are
+ * down, so Sam's own repeat applies; each wheel notch is one tap of up or
+ * down, with a gap after it so the next notch is a press of its own. Only
+ * while that reader runs (the briefing, or NETRICSA on) and no menu is shown. */
+static void netricsa_frame(void)
+{
+    static const char *const targets[4] = {"UP", "DOWN", "LEFT", "RIGHT"};
+    static const int arrow_keys[4][2] = {{VK_UP, 'W'}, {VK_DOWN, 'S'}, {VK_LEFT, 'A'}, {VK_RIGHT, 'D'}};
+    static int pending;
+    static DWORD last_notch;
+    int notches = xbox_KbmWheelNotches();
+    if (!enabled) return;
+    /* Before the title runs there is no guest memory to read. */
+    if (!InterlockedCompareExchange(&menu_draw_seen, 0, 0) && !InterlockedCompareExchange(&action_seen, 0, 0))
+        return;
+    uint32_t game = WORD(GAME);
+    int computer = game ? (int)WORD(game + GAME_COMPUTER_STATE) : 0;
+    if ((computer != COMPUTER_ON && !WORD(BRIEFING)) || shown_menu()) {
+        pending = 0;
+        return;
+    }
+    for (int i = 0; i < 4; ++i)
+        if (physical_down(arrow_keys[i][0]) || physical_down(arrow_keys[i][1])) xbox_KbmPulse(targets[i], 50);
+    pending += notches;
+    if (pending > 10) pending = 10;
+    if (pending < -10) pending = -10;
+    DWORD now = GetTickCount();
+    if (pending && now - last_notch >= 100) {
+        xbox_KbmPulse(pending > 0 ? "UP" : "DOWN", 50);
+        pending += pending > 0 ? -1 : 1;
+        last_notch = now;
+    }
+}
+
 static void wide_frame(void);
 
 static DWORD WINAPI movie_thread(LPVOID unused)
@@ -769,6 +813,7 @@ static DWORD WINAPI movie_thread(LPVOID unused)
     (void)unused;
     for (;;) {
         pc_controls_movie_frame();
+        netricsa_frame();
         /* Only once the title runs: this thread starts before guest memory. */
         if (InterlockedCompareExchange(&menu_draw_seen, 0, 0) || InterlockedCompareExchange(&action_seen, 0, 0))
             wide_frame();

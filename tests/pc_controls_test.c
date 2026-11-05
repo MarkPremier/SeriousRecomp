@@ -56,10 +56,14 @@ void xbox_KbmSetMenuMode(int on){(void)on;}
 void xbox_KbmSetRawMouse(int on){raw_mouse=on;}
 void xbox_KbmSetCapture(int on){capture=on;}
 void xbox_KbmSetBinding(const char *target,const int *binding,int count){(void)target;(void)binding;(void)count;}
-static int a_pulses;
-void xbox_KbmPulse(const char *target,int ms){if(!strcmp(target,"A")){++a_pulses;return;}CHECK(!strcmp(target,"START"));if(ms)++start_pulses;}
+static int a_pulses,dpad_pulses[4],notches;
+void xbox_KbmPulse(const char *target,int ms){
+    static const char *const dpad[4]={"UP","DOWN","LEFT","RIGHT"};
+    for(int i=0;i<4;++i) if(!strcmp(target,dpad[i])){CHECK(ms>0);++dpad_pulses[i];return;}
+    if(!strcmp(target,"A")){++a_pulses;return;}CHECK(!strcmp(target,"START"));if(ms)++start_pulses;}
 int xbox_KbmInputDown(int key){return key>=0 && key<0x108?down[key]:0;}
 int xbox_KbmMenuWheel(void){int n=wheel;wheel=0;return n;}
+int xbox_KbmWheelNotches(void){int n=notches;notches=0;return n;}
 static int video_active;
 static DWORD WINAPI frame_on_worker(LPVOID unused){(void)unused;pc_controls_frame();pc_controls_movie_frame();return 0;}
 int xbox_VideoActive(void){return video_active;}
@@ -317,6 +321,21 @@ int main(void)
         down[VK_RETURN]=0;pc_controls_movie_frame();
         /* End-of-level statistics: 3D models, but no play running: A. */
         action_ms-=1000;down[VK_RETURN]=1;pc_controls_movie_frame();CHECK(a_pulses==1);
+        /* NETRICSA text on the briefing: an arrow holds the d-pad, each wheel
+         * notch is a tap. */
+        down[VK_RETURN]=0;WORD(BRIEFING)=1;
+        down[VK_DOWN]=1;netricsa_frame();netricsa_frame();CHECK(dpad_pulses[1]==2);
+        down[VK_DOWN]=0;down['A']=1;netricsa_frame();CHECK(dpad_pulses[2]==1);
+        down['A']=0;notches=-2;netricsa_frame();CHECK(dpad_pulses[1]==3);
+        netricsa_frame();CHECK(dpad_pulses[1]==3); /* a gap before the next notch */
+        Sleep(120);netricsa_frame();CHECK(dpad_pulses[1]==4);
+        Sleep(120);netricsa_frame();CHECK(dpad_pulses[1]==4 && dpad_pulses[0]==0);
+        WORD(BRIEFING)=0;down[VK_UP]=1;notches=1;netricsa_frame();
+        Sleep(120);netricsa_frame();CHECK(dpad_pulses[0]==0); /* play keeps its keys and wheel */
+        WORD(GAME)=0x100100;WORD(0x100100+GAME_COMPUTER_STATE)=COMPUTER_ON;
+        netricsa_frame();CHECK(dpad_pulses[0]==1); /* NETRICSA opened in play */
+        WORD(ACTIVE_MENU)=page;pc_controls_menu_drawn();netricsa_frame();CHECK(dpad_pulses[0]==1);
+        menu_draw_seen=0;WORD(ACTIVE_MENU)=0;WORD(GAME)=0;down[VK_UP]=0;
         action_seen=0;
         down[VK_RETURN]=0;pc_controls_movie_frame();
         WORD(ACTIVE_MENU)=page;frames_2d=5;down[VK_RETURN]=1;pc_controls_movie_frame();

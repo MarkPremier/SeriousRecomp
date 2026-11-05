@@ -1787,3 +1787,18 @@ Installed Release SHA-256:
   a report that counted a 3D draw is now at least 1 (toolkit); flare (2D)
   tests keep the last count. Not reproduced here: the scripted runs from the
   user's save never brought one into view at a distance.
+
+## 2026-11-05 (evening): NETRICSA text with KB/M
+
+- **Scrolling NETRICSA text from the keyboard and wheel.** NETRICSA's own pad
+  reader (`sub_00058E20`, run from its update `sub_0005F1E0` while
+  `_pGame`'s computer state `[[0x47F6C4]+0xC]` is 1 or the post-load briefing
+  flag `[0x47FE30]` is set) builds held/pressed bits: up 0x80 and down 0x100
+  (d-pad, left or right stick) scroll, left 0x20 / right 0x40 turn messages,
+  with Sam's own repeat. The arrows or W/A/S/D now hold the matching d-pad
+  there, and each wheel notch is one tap (toolkit `xbox_KbmWheelNotches`, as
+  the WheelUp latch merges a spin into one hold). The briefing's boxed preview
+  counts as a video and the level's action builder state is unrelated, so the
+  screen test is the reader's own gate. Verified live on the Sand Canyon
+  briefing (held bits 0x100/0x20 from the keys, three taps from three posted
+  notches); the gate clears on Start, so play keeps its keys and wheel.
