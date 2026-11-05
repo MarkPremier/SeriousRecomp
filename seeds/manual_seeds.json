@@ -1,1 +1,34 @@
-[]
+[
+  {
+    "start": "0x0008B334",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x001E76F5",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x001E7BA1",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x001ED28F",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x0027371C",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x00273934",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x00273F4C",
+    "note": "C++ catch continuation inside a split piece; its own entry lets the try function's anchor resume it by tail call (2026-11-05)"
+  },
+  {
+    "start": "0x00358CB0",
+    "note": "C++ catch continuation of sub_00358B27, which links its try block through __EH_prolog; its own entry lets the anchor after that call resume it (2026-11-05)"
+  }
+]

@@ -143,9 +143,10 @@ If the game crashes or freezes, the details are in `serious_sam_log.txt`
 beside the program (the run before is kept as `serious_sam_log.prev.txt`).
 Please include it with any report.
 
-Known issues in this beta: only the first level has been tested in depth; a
-rare freeze during the boot movies; one crash seen after firing in Hatshepsut,
-and one when DirectSound shuts down.
+Known issues in this beta: only the first two levels have been played
+through; a rare freeze during the boot movies; one crash once seen after
+firing in Hatshepsut (not reproduced since); one native stack overflow when
+loading Sand Canyon (not reproduced; the log now records where it happens).
 
 ## What you need
 

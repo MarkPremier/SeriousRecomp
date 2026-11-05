@@ -1764,3 +1764,14 @@ Installed Release SHA-256:
   `0x30AA22`) has nothing to flush on the host; `in`/`out` on port `0x80C0`
   (`0x30B77D`, `0x30C6A9`) is the TV field bit, irrelevant to progressive
   output.
+- **C++ catch continuations: all 190 now resumable.** Eight had no branch: seven
+  sat in a split piece of their function, and one function (`sub_00358B27`)
+  links its try block through `__EH_prolog` (`0x2C2D18`), so the generator
+  armed no anchor for it. All eight are seeded as function entries
+  (`seeds/manual_seeds.json`), which the anchor resumes by tail call. Toolkit
+  `cxx_eh` finds `__EH_prolog` by its bytes and arms an anchor after
+  `mov eax, thunk / call __EH_prolog` at `ebp-0Ch`. Full generation: 35,115
+  functions, 0 failures, 9 unresolved stubs (was 10), scan reports 0
+  continuations without a branch. None had been hit in any recorded run. A
+  5-minute isolated soak (combat, deaths, restart) had no crash or `[EH]`
+  message; the 4 boot-time throws were caught.
