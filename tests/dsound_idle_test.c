@@ -17,6 +17,7 @@ void sub_00367741(void);
 static uint32_t work_first, work_ecx;
 void sub_00367741_gen(void) { work_ecx = g_ecx; work_first = WORD(DSOUND + 0x740); }
 void sub_00368B2C_gen(void) { abort(); }
+void sub_0030B700_gen(void) { abort(); }
 void sub_001A6FF0_gen(void) { abort(); }
 void sub_0019F1E0_gen(void) { abort(); }
 void sub_0019F5E0_gen(void) { abort(); }

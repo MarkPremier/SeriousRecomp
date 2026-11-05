@@ -1733,3 +1733,25 @@ Installed Release SHA-256:
   `UDATA`) for anything that selects a profile.
 - The 10 ms thread's widescreen check must wait for the title: it starts
   before guest memory, and `585d135` crashed at launch (fixed the same night).
+
+## 2026-11-05: performance and stability review (vs the PC source)
+
+- **Heap reservations (no change).** Every save requests a 128 MB stream
+  reservation, which the heap grants clamped (64 MB once, then 32 MB). The
+  user's session and a ten-save restart soak both stay at 32 MB, more than
+  a 4 MB save needs, so there is no progressive fragmentation. A best-fit
+  allocator gave the same numbers and was reverted. The extended VMA
+  (`RECOMP_EXT_VMA`) cannot host these reserves: the RAM mirrors reach
+  `0xE8000000`, leaving nothing above them.
+- **Vblank handler spin (fixed).** Combat profile (scratchpad sampler):
+  44% of the timer thread sat in `sub_0030B700`, XDK 4928's vblank handler.
+  It acknowledges PCRTC_INTR_0 and spins until PMC_INTR_0 bit 24 drops, which
+  only the executor's busy-bit ack clears here. A wrapper drops the bit as the
+  handler starts (its dispatcher `sub_0030B510` has already checked it).
+  Same combat run: worst frame per 5 s 26–40 ms before, 8.6–8.9 ms after, at
+  a steady 120 fps; the timer thread, which also runs DPCs and timers, no
+  longer appears in the profile.
+- Still open from this pass: `in al, dx` (port `0x80C0`, the TV field bit) at
+  `0x30B77D` is untranslated (`RECOMP_UNIMPL`), so D3D's field parity is
+  undefined; harmless for progressive output. `BlockOnTime` and the
+  visibility wait remain busy-waits, idle time under the frame cap.

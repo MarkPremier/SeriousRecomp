@@ -29,6 +29,7 @@ void sub_00367844_gen(void){abort();}
 void sub_003098A0_gen(void){abort();}
 void sub_00367741_gen(void) { abort(); }
 void sub_00368B2C_gen(void) { abort(); }
+void sub_0030B700_gen(void) { abort(); }
 void sub_00304F90(void) { abort(); }
 static void run(uint32_t caller,int sync,int expected){
  interval=sync;waits=0;pc_frame_calls=0;g_esp=0x1000;WORD(g_esp)=caller;

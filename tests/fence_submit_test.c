@@ -22,6 +22,7 @@ void sub_003098A0(void);
  * 0x313C4C is set, which these tests leave clear. */
 void sub_00367741_gen(void) { abort(); }
 void sub_00368B2C_gen(void) { abort(); }
+void sub_0030B700_gen(void) { abort(); }
 void sub_00304F90(void) { abort(); }
 void sub_003098A0_gen(void)
 {

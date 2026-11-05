@@ -342,6 +342,22 @@ void sub_00309700(void)
     g_esp += 4; /* ret */
 }
 
+/* XDK 4928's vblank handler, reached once its dispatcher (sub_0030B510) has
+ * seen PMC_INTR_0 bit 24 (PCRTC pending). It acknowledges PCRTC_INTR_0 and
+ * spins until bit 24 drops, which hardware does on that write. Here both are
+ * plain memory that only the executor's busy-bit ack clears, once a walk
+ * pass, so the handler spun on the timer thread every blank (44% of it in
+ * combat) and held DPCs and timers back. Drop the bit as the handler starts:
+ * the dispatch check is behind it, and the loop then sees it clear. */
+#define NV2A_PMC_INTR_0     0xFD000100u
+#define NV2A_PMC_INTR_PCRTC 0x01000000u
+extern void sub_0030B700_gen(void);
+void sub_0030B700(void)
+{
+    GUEST32(NV2A_PMC_INTR_0) &= ~NV2A_PMC_INTR_PCRTC;
+    sub_0030B700_gen();
+}
+
 /* Open_t reserves a lazy stream buffer; the console fills it through SEH page
  * faults. Committed guest RAM cannot fault here. Reuse the translated page-in
  * routine instead of reimplementing the engine's file/archive formats. */
