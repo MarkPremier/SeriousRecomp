@@ -1775,3 +1775,6 @@ Installed Release SHA-256:
   continuations without a branch. None had been hit in any recorded run. A
   5-minute isolated soak (combat, deaths, restart) had no crash or `[EH]`
   message; the 4 boot-time throws were caught.
+- Floor shadows showing through brazier and torch flames (user screenshot,
+  Gnaar room): the flames are additive sprites, so a darker background shows
+  through them. **The user confirmed the original looks the same; not a bug.**
