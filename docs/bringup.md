@@ -1830,3 +1830,15 @@ Installed Release SHA-256:
   spawned, one of 68.3 left a corpse; rockets dealt 119-154. A shotgun kill
   barely clears 70, so the corpse is the original rule. The user saw the
   bones in that run.
+
+## 2026-11-07: Smooth mouse look
+
+- **Mouse look in bursts.** The toolkit window thread (`fb_present.c`
+  `fb_thread`) pumped messages then `Sleep(4)`, which lasts the 15.6 ms system
+  tick (nothing in this process raises the timer resolution). Raw mouse input
+  therefore arrived in bursts; at 120 fps some frames got no movement and
+  others two bursts. It now waits with `MsgWaitForMultipleObjectsEx(0, NULL,
+  4, QS_ALLINPUT, MWMO_INPUTAVAILABLE)`, the same change as the Turok branch
+  (Turok `cbba49c`), so input wakes it at once. Checked at boot: the window
+  thread sat in the wait with no measurable CPU (the 99% thread is the
+  executor's `nv2a_ack_thread`, a known busy-wait).
