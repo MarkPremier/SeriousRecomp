@@ -1802,3 +1802,21 @@ Installed Release SHA-256:
   screen test is the reader's own gate. Verified live on the Sand Canyon
   briefing (held bits 0x100/0x20 from the keys, three taps from three posted
   notches); the gate clears on Start, so play keeps its keys and wheel.
+
+## 2026-11-06: Frame limit drop in Tomb of Ramses
+
+- **120 to 64 fps with a frame limit, fine uncapped (user, Tomb of Ramses).**
+  The executor drains outstanding visibility reports
+  (`nv2a_gpu_zpass_drain`) at every fence release, several times a frame
+  (timed: about 800 drains a second, the game thread spending 880 ms of each
+  second in fence waits). A keyed report still unanswered waited the 2 ms
+  grace before taking its slot's last count; at about seven full waits a
+  frame that is 15.6 ms, which is 64 fps. Uncapped, the host GPU stays busy
+  and answers quickly; capped at 120 it sat near 20% load, likely clocked
+  down, and every drain used the whole grace. The grace is now 0.25 ms
+  (toolkit; `RECOMP_ZPASS_WAIT_MS` still sets it). The user confirmed the
+  spot holds 120 with it; their log showed 120 flips a second, the longest
+  drain 0.25-0.41 ms and at most 13 late answers a second. The late-answer
+  rules are unchanged (a 3D test answers at least 1, a flare keeps the last
+  count). The earlier F11 capture now also logs ZPASS clears, reports and
+  answers in stream order.
