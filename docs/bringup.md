@@ -1820,3 +1820,13 @@ Installed Release SHA-256:
   rules are unchanged (a 3D test answers at least 1, a flare keeps the last
   count). The earlier F11 capture now also logs ZPASS clears, reports and
   answers in stream order.
+- **Kleer bone gibs missing after shotgun/rocket kills (user; not a bug).**
+  Enemy death asks `ShouldBlowUp` (EnemyBase `0x00121650`, vtable +0x16C):
+  gibs on (`[0x407B30]`), health <= 0, recent damage `|[+0x420]|` above the
+  blow-up amount `[+0x414]` (Kleer 70, vtable `0x003B5B50`) and `[+0x4EC]`
+  zero. The Kleer's `BlowUp` (`0x0015BB60`, +0x170) then spawns body, two arms
+  and legs through `sub_00051BD0` (SKA debris, components 0x13115-0x13117).
+  A logged run: shotgun kills of 73.0 and 72.9 blew up with all four pieces
+  spawned, one of 68.3 left a corpse; rockets dealt 119-154. A shotgun kill
+  barely clears 70, so the corpse is the original rule. The user saw the
+  bones in that run.
