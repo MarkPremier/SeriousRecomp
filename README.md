@@ -113,6 +113,11 @@ your own disc image, and the C code is generated from it on your machine.
   compiles. This reduces repeat compilation stalls; steady scene frame rate
   still depends on the scene's work.
 
+- Frame limit (2026-11-06): with a limit set, Tomb of Ramses dropped from 120
+  to 64 fps while uncapped play held. Each fence wait gave the PC GPU up to
+  2 ms to return visibility counts, and a lightly loaded GPU used it every
+  time; the grace is now 0.25 ms and the spot holds 120.
+
 ## Playing
 
 You need your own copy of Serious Sam for the original Xbox, **USA** release.
@@ -299,7 +304,9 @@ Mouse speed (1–10), invert Y and Restore defaults are on the same page.
 Escape, Enter, Space or a left click skips a movie, as Start does on a pad.
 Menus always keep arrows/WASD, Enter/Space to select and Escape/Backspace to
 return, independently of gameplay bindings. Escape also supplies Start at the
-loading screen's “press START” prompt. Click the game window to capture the
+loading screen's “press START” prompt. In NETRICSA and the level briefing, the
+arrows or W/S scroll the text (the mouse wheel too) and A/D or left/right
+change message. Click the game window to capture the
 mouse for looking; Alt+Escape releases it. Opening a menu releases it too.
 
 Settings are saved under `[pc_controls]` in `serious_sam_settings.ini` beside the
