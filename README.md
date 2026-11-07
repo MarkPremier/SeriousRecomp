@@ -118,6 +118,11 @@ your own disc image, and the C code is generated from it on your machine.
   2 ms to return visibility counts, and a lightly loaded GPU used it every
   time; the grace is now 0.25 ms and the spot holds 120.
 
+- Mouse look and widescreen (2026-11-07): the window thread now wakes on each
+  input instead of sleeping a system tick (15.6 ms), so mouse movement reaches
+  every frame evenly. Resuming from the pause menu stays widescreen while the
+  menu slides away, instead of flashing 4:3 for half a second.
+
 ## Playing
 
 You need your own copy of Serious Sam for the original Xbox, **USA** release.
