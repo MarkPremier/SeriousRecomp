@@ -346,6 +346,24 @@ int main(void)
      * page: only a menu the renderer still draws counts as shown. */
     WORD(ACTIVE_MENU)=0x46C9B0;pc_controls_menu_drawn();CHECK(shown_menu()==0x46C9B0);
     menu_draw_ms-=1000;CHECK(shown_menu()==0);
+    /* Widescreen around the pause menu: its 500 ms slide-away names the page
+     * play came back from and stays wide; Options opened from it is 4:3. */
+    {
+        const float wide=64.0f/27*3/4;
+        video_active=0;
+        WORD(ACTIVE_MENU)=MAIN_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        WORD(ACTIVE_MENU)=0x46C9B0;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        WORD(ACTIVE_MENU)=0;action_seen=1;action_ms=(LONG)GetTickCount();wide_frame();CHECK(wide_set==wide);
+        WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==wide);
+        action_ms-=1000;
+        WORD(ACTIVE_MENU)=0x46C9B0;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==wide);
+        WORD(ACTIVE_MENU)=0;action_ms=(LONG)GetTickCount();wide_frame();CHECK(wide_set==wide);
+        WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();wide_frame();action_ms-=1000;
+        WORD(ACTIVE_MENU)=0x472568;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==wide);
+        WORD(ACTIVE_MENU)=MAIN_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        action_seen=0;
+    }
     menu_draw_seen=0;WORD(ACTIVE_MENU)=0;
     native_mouse_test();
     DeleteFileA(path);free((void *)g_xbox_mem_offset);

@@ -850,20 +850,29 @@ static void wide_frame(void)
 static void wide_frame_locked(void)
 {
     static int in_level;
-    static uint32_t last_menu = 1;
+    static uint32_t last_menu = 1, from_menu, last_page, resume_page;
     uint32_t menu = shown_menu();
-    if (menu != last_menu && getenv("RECOMP_MENU_MOUSE_TRACE")) {
-        fprintf(stderr, "[MENU] active %08X (was %08X) at %lu ms\n", menu, last_menu, GetTickCount());
+    if (menu != last_menu) {
+        if (getenv("RECOMP_MENU_MOUSE_TRACE"))
+            fprintf(stderr, "[MENU] active %08X (was %08X) at %lu ms\n", menu, last_menu, GetTickCount());
+        from_menu = last_menu;
     }
     last_menu = menu;
+    if (menu) last_page = menu;
     if (menu == MAIN_MENU)
         in_level = 0;
-    else if (!menu && !xbox_VideoActive())
+    else if (!menu && !xbox_VideoActive()) {
         in_level = 1;
+        resume_page = last_page;
+    }
+    /* Leaving the pause menu, Sam names the page play last came back from
+     * (the one the level was started from) for the 500 ms its entries take
+     * to slide away over the paused level, then clears it and play resumes.
+     * That is still the pause menu on screen. The pages it opens are not. */
+    int pause_menu = menu == PAUSE_MENU || (menu && menu == resume_page && from_menu == PAUSE_MENU);
     /* NETRICSA's pages (the end-of-level statistics) are laid out for 4:3 as
      * the menus are, so wide is play and the pause menu over it only. */
-    float wide = in_level && ((!menu && playing()) || menu == PAUSE_MENU) ? pc_settings_aspect() * 3.0f / 4.0f
-                                                                          : 1.0f;
+    float wide = in_level && ((!menu && playing()) || pause_menu) ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
     if (fabsf(wide - view_wide) > 0.0001f) {
         view_wide = wide;
         nv2a_gpu_set_wide_factor(wide);

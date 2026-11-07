@@ -1842,3 +1842,21 @@ Installed Release SHA-256:
   (Turok `cbba49c`), so input wakes it at once. Checked at boot: the window
   thread sat in the wait with no measurable CPU (the 99% thread is the
   executor's `nv2a_ack_thread`, a known busy-wait).
+
+## 2026-11-07: Pause menu exit stays wide
+
+- **Unpausing flashed 4:3 before widescreen came back (user, 21:9).** Traced
+  with `RECOMP_MENU_MOUSE_TRACE=1` in an isolated Tomb of Ramses run: on Start
+  or B over the pause menu (`0x0046E5B0`), `ACTIVE_MENU` names the page play
+  last came back from (here the level's launch page, `0x0046C9B0`) for 500 ms
+  while the pause menu's entries slide off over the still-paused level (no
+  action-builder ticks), then Sam clears it and play resumes in the same
+  instant. The wide policy saw "a menu that is not the pause menu" and drew
+  that half second at 4:3. `wide_frame_locked` now remembers the last page
+  shown before play (`resume_page`) and treats that page, entered straight
+  from the pause menu, as the pause menu. Options (`0x00472568`) and the other
+  pages the pause menu opens stay 4:3. Verified live (screenshots mid-slide
+  are wide; Options is pillarboxed) and in `pc_controls_test`. After a visit
+  to Options, its entries straddling the 4:3 edges during that slide show at
+  the screen edges: 2D that reaches an edge is not squeezed (toolkit), as a
+  4:3 screen shows them at its edges.
