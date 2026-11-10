@@ -2006,3 +2006,33 @@ images, workspace partition images and Release INIs were backed up to
 sources with SHA-256; the manifest records original paths and restore notes
 are included. Backup partition images retain sparse storage. No test wrote
 the user's saves or settings.
+
+## 2026-11-10: investigate sluggish keyboard movement
+
+The user reported keyboard movement feeling delayed. The installed `F94E1A...`
+build was tested at the user's settings (120 fps limit, VSync off, 2880x2160
+base resolution, 21:9 and 4x MSAA). The private gameplay run generally held
+119-120 flips per second. Held keyboard bindings are read directly from the
+window's state in `pc_controls_input_begin`, without a separate key queue or
+stick acceleration layer.
+
+A native diagnostic sampled the applied keyboard state, player position and
+velocity, and the exported camera projection's viewer position at approximately
+1 ms intervals. In a clear Hatshepsut courtyard with health remaining at 100,
+six A/D press/release trials measured 2-66 ms from the native held-key state
+to the first visible-camera position change. Stopping after release took
+154-250 ms. Moving simulation steps were approximately 50 ms apart (median
+50.005 ms), despite rendering at 120 fps. The original XBE's alive-action
+routine `0x7CF20` copies acceleration 100 and deceleration 60 from `0x407AD0`
+and `0x407AD4` into the player's movement parameters; its movement speed is
+10. This supports original simulation timing and braking as substantial
+contributors, rather than evidence of a new buffered-keyboard regression.
+
+These are internal applied-key-to-camera measurements, not physical
+key-to-photon latency measurements. An earlier Oasis sample was unsuitable
+because the saved position was obstructed and the player died; it was not
+used for the conclusion. Evidence and raw CSVs are under
+`analysis/movement_latency_20261110/clear_area`. Tests used private saves,
+settings and shader caches. No gameplay physics or settings were changed;
+the user was asked whether to add an optional Original / Responsive keyboard
+movement mode, since that would deliberately change the original feel.
