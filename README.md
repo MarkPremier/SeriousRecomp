@@ -80,6 +80,9 @@ your own disc image, and the C code is generated from it on your machine.
 - **Options > PC Settings** controls render resolution, aspect ratio
   (widescreen and ultrawide, Hor+), fullscreen, VSync, frame limit,
   anisotropic filtering and MSAA, with live changes and saved choices.
+- Scripted in-game camera sequences keep their original 4:3 framing and
+  letterboxing, with black side bars on wider displays. Gameplay's selected
+  aspect ratio returns automatically when the cinematic camera releases it.
 - Escape, Enter, Space or a left click skips the intro and other movies.
   Options rows, including the PC entries, retain the original alternating
   left/right slide-in animation.

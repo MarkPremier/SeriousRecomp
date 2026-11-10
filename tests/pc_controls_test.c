@@ -362,6 +362,24 @@ int main(void)
         WORD(ACTIVE_MENU)=0x472568;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
         WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==wide);
         WORD(ACTIVE_MENU)=MAIN_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        WORD(ACTIVE_MENU)=0;action_ms=(LONG)GetTickCount();wide_frame();CHECK(wide_set==wide);
+        /* Input ticks continue during an in-engine cinematic. Preserve its
+         * original framing even while playing() remains true, then restore
+         * gameplay immediately; third-person play has no scripted camera. */
+        WORD(0x700300)=PLAYER_VTABLE;WORD(0x700300+0x3A0)=3;
+        wide_frame();CHECK(wide_set==wide); /* Ordinary third-person view. */
+        WORD(0x700300+0x3A0)=0;WORD(0x700300+PLAYER_CAMERA)=0x710000;
+        wide_frame();CHECK(wide_set==1 && pc_controls_view_wide()==1 && playing());
+        WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
+        WORD(ACTIVE_MENU)=0;WORD(0x700300+PLAYER_CAMERA)=0;
+        action_ms=(LONG)GetTickCount();wide_frame();CHECK(wide_set==wide);
+        video_active=1;wide_frame();CHECK(wide_set==1);
+        video_active=0;wide_frame();CHECK(wide_set==wide);
+        /* Stale or absent session entities must not be dereferenced. */
+        WORD(0x700204)=0xFFFFFFFC;wide_frame();CHECK(wide_set==wide);
+        WORD(0x700204)=0;wide_frame();CHECK(wide_set==wide);
+        WORD(0x700204)=0x700300;
+        WORD(ACTIVE_MENU)=MAIN_MENU;pc_controls_menu_drawn();wide_frame();CHECK(wide_set==1);
         action_seen=0;
     }
     menu_draw_seen=0;WORD(ACTIVE_MENU)=0;

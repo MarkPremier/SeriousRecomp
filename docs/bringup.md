@@ -1969,3 +1969,40 @@ audio quality and the user's exact Sand Canyon scene still need user testing.
 
 The runtime patch now includes `bee76c6` relative to `f5f395f`. Turok paths and
 the pre-existing kernel memory-layout modification remain untouched.
+
+## 2026-11-10: preserve cinematic framing on ultrawide displays
+
+The action-builder heartbeat used to identify gameplay also continues during
+scripted camera sequences. The Xbox camera renderer (`0x7CAB0`) reads the
+player's cinematic camera at +0x3F0 and can create a shorter letterbox drawport.
+Gameplay's Hor+ projection wrapper deliberately excludes that drawport, while
+the old presentation policy still widened its render target. This stretches
+the cinematic instead of widening its field of view.
+
+`pc_controls.c` now keeps the existing 4:3 presentation path while the first
+session player's cinematic camera is active, and while XMV playback is active
+even if input ticks continue. The original camera projection and letterboxing
+remain intact; wider windows get black side bars. Gameplay's selected aspect
+returns as soon as the camera/video ends. The player/session lookups check
+their ranges and player vtable before reading the cinematic field. This is
+title-side policy only; no engine source was copied or adapted.
+
+Validation: all eleven CTests pass. The controls regression covers active
+input during a cinematic, pausing, return to ultrawide, ordinary third-person
+view, video playback and missing/stale player objects. A normal portable
+launch using copied UDATA/TDATA and sparse partition images loaded the user's
+Oasis save and continued gameplay at the selected 21:9 ratio. The title policy
+and GPU both reported a 1.777778 widening factor. The user could not name a
+specific cutscene, and this save had no CCamera instances; the exact mid-level
+cinematic's final display still needs user verification. Evidence is in
+`analysis/cutscene_aspect_20261110/verify_camera`.
+
+The Release executable is installed with SHA-256
+`F94E1A0D3F1FE4AB477CD5B5C304D0F1DA048B961CF4CDD2EA5A10CCF54AFEAA`.
+The previous executable/map are retained in that analysis directory's
+`previous_build`. Before installing, the user's active UDATA, TDATA, partition
+images, workspace partition images and Release INIs were backed up to
+`backups/saves_2026-11-10_23-33-47`. All 23 files were verified against their
+sources with SHA-256; the manifest records original paths and restore notes
+are included. Backup partition images retain sparse storage. No test wrote
+the user's saves or settings.

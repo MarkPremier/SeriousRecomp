@@ -42,6 +42,11 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 /* Set while the post-load briefing ("Please press START to continue") is up;
  * NETRICSA's update (sub_0005F1E0) reads its pad for this or COMPUTER_ON. */
 #define BRIEFING            0x0047FE30u
+/* CPlayer::RenderCameraView (0x7CAB0) tests m_penCamera at +0x3F0.
+ * Action building continues while that scripted camera owns the view. */
+#define NETWORK             0x004A2AE0u
+#define PLAYER_VTABLE       0x003ABCD0u
+#define PLAYER_CAMERA       0x3F0u
 #define MOUSE1      0x101
 #define MOUSE2      0x102
 #define MOUSE3      0x103
@@ -829,6 +834,25 @@ static DWORD WINAPI movie_thread(LPVOID unused)
  * with no menu and no movie until the main menu comes back. */
 static float view_wide = 1.0f;
 
+static int guest_range(uint32_t address, uint32_t bytes)
+{
+    return address >= 0x10000u && address <= 0x08000000u - bytes;
+}
+
+static int cinematic_camera_active(void)
+{
+    /* The same first-player lookup as GetPlayerEntity(0), 0x1E6FB0.
+     * Startup, loading and disconnected players need not have these objects. */
+    uint32_t net = WORD(NETWORK);
+    if (!guest_range(net, 0x18)) return 0;
+    uint32_t session = WORD(net + 0x14);
+    if (!guest_range(session, 0x14)) return 0;
+    uint32_t players = WORD(session + 0x10);
+    if (!guest_range(players, 8) || !WORD(players)) return 0;
+    uint32_t player = WORD(players + 4);
+    return guest_range(player, PLAYER_CAMERA + 4) && WORD(player) == PLAYER_VTABLE && WORD(player + PLAYER_CAMERA) != 0;
+}
+
 float pc_controls_view_wide(void)
 {
     return view_wide;
@@ -872,7 +896,12 @@ static void wide_frame_locked(void)
     int pause_menu = menu == PAUSE_MENU || (menu && menu == resume_page && from_menu == PAUSE_MENU);
     /* NETRICSA's pages (the end-of-level statistics) are laid out for 4:3 as
      * the menus are, so wide is play and the pause menu over it only. */
-    float wide = in_level && ((!menu && playing()) || pause_menu) ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
+    /* Scripted camera views retain the console's framing. Their original
+     * letterbox drawport is shorter than full screen, so gameplay's Hor+
+     * projection hook cannot compensate for stretching the render target.
+     * Use the existing 4:3 presentation path, which adds black side bars. */
+    int cinematic = cinematic_camera_active() || xbox_VideoActive();
+    float wide = in_level && !cinematic && ((!menu && playing()) || pause_menu) ? pc_settings_aspect() * 3.0f / 4.0f : 1.0f;
     if (fabsf(wide - view_wide) > 0.0001f) {
         view_wide = wide;
         nv2a_gpu_set_wide_factor(wide);

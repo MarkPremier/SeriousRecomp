@@ -51,6 +51,7 @@ analysis/
 test_game/
 test_clean/
 saves/
+backups/
 serious_sam_settings.ini
 serious_sam_log.prev.txt
 
