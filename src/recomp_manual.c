@@ -145,6 +145,10 @@ void sub_001D1C00(void)
  * original then calls Unlink with this=0. There is no live voice to unlink in
  * that case. This is the same condition encountered in Turok, using Sam's own
  * notifier and layout (Turok's owner table is at a different offset). */
+extern MCPXAPUState *g_apu_state;
+extern int mcpx_apu_voice_idle_begin(MCPXAPUState *d, uint32_t voice);
+extern void mcpx_apu_voice_idle_end(MCPXAPUState *d, uint32_t voice);
+
 void sub_00367844(void)
 {
     uint32_t handle = GUEST32(g_esp + 4);
@@ -152,7 +156,16 @@ void sub_00367844(void)
         g_esp += 8; /* ret 4 */
         return;
     }
+    /* The owner can still be live after its voice was stopped and restarted.
+     * Reject that stale completion, holding the voice stable through Unlink.
+     * Keep the original bounds handling and the no-APU path unchanged. */
+    int guarded = handle < 256 && g_apu_state != NULL;
+    if (guarded && !mcpx_apu_voice_idle_begin(g_apu_state, handle)) {
+        g_esp += 8;
+        return;
+    }
     sub_00367844_gen();
+    if (guarded) mcpx_apu_voice_idle_end(g_apu_state, handle);
 }
 
 /* DirectSound's DPC work (sub_00367741) calls vtable +0x14 on every voice

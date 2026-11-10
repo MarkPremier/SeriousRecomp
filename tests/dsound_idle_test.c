@@ -11,8 +11,15 @@ volatile uint64_t g_icall_count;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
 enum { DSOUND = 0x10000, STACK = 0x20000 };
 static unsigned notifications;
+typedef struct MCPXAPUState MCPXAPUState;
+extern MCPXAPUState *g_apu_state;
+extern int pc_idle_allowed;
+extern unsigned pc_idle_checks, pc_idle_held;
 void sub_00367844(void);
-void sub_00367844_gen(void) { ++notifications; g_esp += 8; }
+void sub_00367844_gen(void) {
+    if (g_apu_state && WORD(g_esp + 4) < 256) CHECK(pc_idle_held == 1);
+    ++notifications; g_esp += 8;
+}
 void sub_00367741(void);
 static uint32_t work_first, work_ecx;
 void sub_00367741_gen(void) { work_ecx = g_ecx; work_first = WORD(DSOUND + 0x740); }
@@ -72,6 +79,14 @@ int main(void)
     run(0, 0, 0); run(255, 0, 0); /* Retired voices: no invalid Unlink. */
     run(0, 0x12340, 1); run(255, 0x23450, 1); /* Live notifications retained. */
     run(256, 0, 1); run(UINT32_MAX, 0, 1); /* Original bounds handling retained. */
+    g_apu_state = (MCPXAPUState *)(uintptr_t)1;
+    pc_idle_allowed = 0;
+    run(64, 0x12340, 0); /* A stale completion must not unlink a restarted owner. */
+    CHECK(pc_idle_checks == 1 && !pc_idle_held);
+    pc_idle_allowed = 1;
+    run(64, 0x12340, 1); /* Genuine completion holds the voice through Unlink. */
+    CHECK(pc_idle_checks == 2 && !pc_idle_held);
+    run(256, 0, 1); CHECK(pc_idle_checks == 2);
     work_test();
     free((void *)g_xbox_mem_offset);
     puts("idle voice ownership and guest ABI checks passed");

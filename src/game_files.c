@@ -241,8 +241,9 @@ static int walk(Image *image, const uint8_t *table, uint32_t size, uint32_t offs
     if (out) snprintf(path, sizeof path, "%s\\%s", out, name);
     if (attributes & 0x10) {
         uint8_t *sub = read_table(image, sector, bytes);
-        int ok = 1;
-        if (out && !CreateDirectoryA(path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ok = 0;
+        int ok = bytes == 0 || sub != NULL;
+        if (!ok) fprintf(stderr, "[GAME] could not read directory %s (%u bytes at sector %u)\n", name, bytes, sector);
+        if (ok && out && !CreateDirectoryA(path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ok = 0;
         if (ok && sub) ok = walk(image, sub, bytes, 0, depth + 1, out ? path : NULL);
         free(sub);
         if (!ok) return 0;

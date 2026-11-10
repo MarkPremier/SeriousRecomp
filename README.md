@@ -10,6 +10,15 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- Stability fixes (2026-11-10): audio updates now wait only for the affected
+  voice's mixer slice, locked voices stop advancing, and stale completion
+  notifications cannot retire restarted sounds. Short one-shots retain their
+  final samples. Vertex shaders cache each input layout separately, and failed
+  variants are remembered instead of repeatedly compiled. Disc extraction now
+  reports unreadable nonempty directories instead of silently omitting them.
+  The expanded ten-test regression suite passes, including real VP/resampler
+  and D3D11 WARP checks.
+
 - Mouse menus: the Select Player footer's Back, New Player, Delete Player and
   Select actions can be clicked on either their labels or controller icons.
   Moving between menu items now plays the game's normal selection sound,
@@ -206,6 +215,29 @@ analysis and regenerates the C in about two minutes. It uses explicit
 per-game analysis directories, excludes manual overrides, and backs up existing
 generated C under `analysis/` before regeneration. Analysis, game data and generated
 C are ignored by Git. The Turok runtime is never used as a shared output directory.
+
+The runtime fixes above are local `serious-sam` commits `af664e0` (audio) and
+`fd2954b` (shader caches). For an earlier runtime at `f5f395f`, the same changes
+are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
+before building if those fixes are absent:
+
+```powershell
+git -C ../xboxrecomp_ss apply --check ../serious_sam/patches/xboxrecomp-serious-sam-stability.patch
+git -C ../xboxrecomp_ss apply ../serious_sam/patches/xboxrecomp-serious-sam-stability.patch
+```
+
+Run the title and runtime integration regressions after the Release build:
+
+```powershell
+& $cmake -S tests -B build-tests
+& $cmake --build build-tests --config Release --parallel 6
+& 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe' --test-dir build-tests -C Release --output-on-failure
+```
+
+The audio checks use generated PCM and the renderer checks use D3D11 WARP.
+They cover lock handoff, voice restarts, sound overlap, final samples, shader
+layout identity, failed-shader caching and extraction errors as well as the
+existing stream, menu, controls, settings and lightmap checks.
 
 ## Running and diagnostics
 

@@ -1860,3 +1860,57 @@ Installed Release SHA-256:
   to Options, its entries straddling the 4:3 edges during that slide show at
   the screen edges: 2D that reaches an edge is not squeezed (toolkit), as a
   4:3 screen shows them at its edges.
+## 2026-11-10: fix the five stability/performance review findings
+
+The focused review in `analysis/review_20261110/review.md` reproduced audio
+mixing while locked, incorrect shader-layout cache hits, silent short one-shots
+and successful extraction of an unreadable nonempty directory. It also found
+that failed shader variants were not remembered. All five are now addressed.
+
+The isolated runtime's audio commit `af664e0` brings across the tested voice
+lifecycle corrections: a per-voice guard waits only for that voice's current
+mixing slice, locked voices are skipped, and idle trap arguments cannot be
+overwritten by unrelated PIO writes. The final source sample and pending
+resampler output are mixed before completing a one-shot. Sam's own
+`sub_00367844` checks the real voice state under this guard around the XDK 4928
+idle callback, using Sam's owner table at DirectSound +0x328. The no-APU and
+original bounds-handling paths are preserved.
+
+Runtime commit `fd2954b` keys vertex cache entries and pending jobs by both
+program and input mask. Failed shader compilation/creation is remembered for
+the process, avoiding repeated retries. The title's extraction walk now fails
+if a nonempty directory table cannot be read, logs its name/sector/size, and
+still accepts real empty directories. The runtime changes, relative to
+`f5f395f`, are carried in `patches/xboxrecomp-serious-sam-stability.patch` for
+reproducible builds without publishing the runtime branch.
+
+Validation:
+
+- Native x64 Release build succeeded. Executable SHA-256:
+  `ADB3FE7855CFC6D049379D14AA3E98B6A77FE4070254B18663F12C0C855AB27D`.
+- All ten CTests pass, including the seven previous title regressions.
+- New real-VP tests cover lock handoff, sixteen simultaneous other voices,
+  stop/restart races, short/long one-shots at three pitches, inclusive source
+  endpoints, loops, pause/resume, and overlapping shot/impact sounds.
+- A D3D11 WARP test checks distinct layouts, pending layouts and cached
+  failures, including preservation of the pixel fallback. Extraction tests
+  check both passes against unreadable nonempty and valid empty directories.
+- A normal-discovery launch, with the new executable beside a portable
+  `game/` folder, reached the main menu and player-name setup. A subsequent
+  run continued through Select Player and the story movie to Hatshepsut's
+  briefing and gameplay. Runtime frame exports show the world, weapon and
+  HUD. Native diagnostic pad input exercised movement and firing without a
+  crash in this short session. The selected 60 fps cap held in gameplay;
+  this is not an uncapped performance comparison or a long-play result.
+
+Evidence is under `analysis/review_20261110/normal_fixed`: the initial
+`stderr.txt`/`frames`, the subsequent `stderr_play.txt` and `capture_10.bmp`
+(Hatshepsut). Test runs used private sparse copies of the old performance-save
+snapshot, private settings and a private shader cache. No original saves or
+settings were written. Subjective sound quality, physical input and extended
+gameplay remain unverified. Existing audio queue starvation and historical
+visual issues are not claimed solved by these five corrections.
+
+Turok sources and worktrees were read only. The existing local modification in
+`xboxrecomp_ss/src/kernel/xbox_memory_layout.c` was preserved and not included
+in either runtime commit or the patch.

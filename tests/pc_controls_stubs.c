@@ -26,3 +26,20 @@ void sub_00070810_gen(void) {}
 void sub_0002B6BE_gen(void) {++pc_menu_draw_calls;g_esp+=4;}
 float pc_controls_view_wide(void) {return 1.0f;}
 void sub_001D1C00_gen(void) {}
+
+/* Idle-handler handoff, separate from the real VP regression fixture. */
+typedef struct MCPXAPUState MCPXAPUState;
+MCPXAPUState *g_apu_state;
+int pc_idle_allowed = 1;
+unsigned pc_idle_checks, pc_idle_held;
+int mcpx_apu_voice_idle_begin(MCPXAPUState *d, uint32_t voice) {
+    (void)d; (void)voice;
+    ++pc_idle_checks;
+    if (!pc_idle_allowed) return 0;
+    ++pc_idle_held;
+    return 1;
+}
+void mcpx_apu_voice_idle_end(MCPXAPUState *d, uint32_t voice) {
+    (void)d; (void)voice;
+    --pc_idle_held;
+}
