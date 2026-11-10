@@ -1914,3 +1914,58 @@ visual issues are not claimed solved by these five corrections.
 Turok sources and worktrees were read only. The existing local modification in
 `xboxrecomp_ss/src/kernel/xbox_memory_layout.c` was preserved and not included
 in either runtime commit or the patch.
+
+## 2026-11-10: DSP DMA overwrote character pants textures
+
+The user's F11 captures showed corrupted 256x256 DXT1 atlases at contiguous
+addresses `0x81253000`, `0x8125E000` and `0x81286000`. The disc's
+`Models/ENEMIES/Beheaded/Legs.tex` contains an intact brown leather atlas;
+live RAM instead contained repeated 24-bit audio values. A native debugger
+launched against an owned private test process caught the writes in
+`scatter_gather_rw -> gp_scratch_rw -> dsp_dma_run`. This was DSP scratch DMA,
+not texture decoding, UVs or GPU surface writeback.
+
+Sam's GP scatter/gather table mixes contiguous program/control pages with
+ordinary-RAM effects buffers. The previous scratch resolver picked any live
+contiguous allocation at a numeric physical offset. Graphics allocations at
+those same offsets consequently received the DSP's effects output. Runtime
+commit `bee76c6` binds each table's pages through the physical mapper before
+later graphics allocations can change ownership. Table growth keeps existing
+bindings; changed descriptors and rewritten table-base registers allow new
+bindings. GP/EP scratch and FIFO bindings are independent. The APU thread owns
+the binding arrays, with register-write epochs for invalidation and cleanup
+after the thread joins at shutdown. Sample and DirectSound control routing
+policies, GPU rendering and game assets were not modified.
+
+Validation:
+
+- All eleven CTests pass. The new `apu_dma` fixture runs the real transfer
+  code against colliding ordinary/contiguous banks, covering both transfer
+  directions, cross-page copies, table growth, descriptor replacement,
+  re-registration, independent FIFO bindings and malformed extents.
+- Native Release executable SHA-256:
+  `FFF32CF761DD5893B18C1CF887B33EF2E06503448103181117F8A000EFC7AF3A`.
+- A 110-second hardware-watchpoint run caught zero DSP writes to the four
+  watched texture addresses; the previous executable recorded 781 DSP writes
+  in the same observation window. Legitimate title allocation/texture writes
+  remain visible. `analysis/model_texture_20261110/watch_comparison.json`
+  records the comparison; `final_watch/apu_pages.txt` shows program pages
+  pinned to contiguous RAM and effects pages to ordinary RAM.
+- The normal executable completed a 140-second isolated run through menus,
+  Hatshepsut, movement and combat. Captures show the Beheaded enemy with its
+  leather pants texture; a read-only check of the 32,768-byte DXT1 atlas at
+  `0x80E90000` matched the original disc payload exactly. Evidence:
+  `analysis/model_texture_20261110/normal_warm/capture_7.bmp` and
+  `texture_proof/report.json`.
+
+Private tests used copied sparse save images, portable game discovery and
+private settings/caches. A fresh empty shader cache exposed an independent
+NVIDIA driver stack overflow (`nvgpucomp64.dll + 0x3F255EA`) during shader
+creation. The preceding `ADB3FE...` executable reproduced the same failure in
+`baseline_cold`, so it is not attributed to the DSP fix. Copying the existing
+shader cache into the private run allowed normal gameplay validation; this
+does not establish that the cold-cache driver problem is fixed. Physical
+audio quality and the user's exact Sand Canyon scene still need user testing.
+
+The runtime patch now includes `bee76c6` relative to `f5f395f`. Turok paths and
+the pre-existing kernel memory-layout modification remain untouched.

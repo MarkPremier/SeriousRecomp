@@ -1,3 +1,30 @@
+diff --git a/src/apu/README.md b/src/apu/README.md
+index 103d9e1..d08a5dd 100644
+--- a/src/apu/README.md
++++ b/src/apu/README.md
+@@ -239,6 +239,22 @@ Offset      Name                   Description
+ 
+ Full register definitions in `apu_regs.h`.
+ 
++## DSP page ownership (Serious Sam)
++
++GP/EP scratch and FIFO tables may contain both contiguous program pages and
++ordinary-RAM effects buffers. The host's two banks can share a physical page
++number. Resolving every transfer through the currently live contiguous block
++redirected Sam's audio effects into later model textures, producing corrupted
++pants. Native write watchpoints identified `scatter_gather_rw` as the writer.
++
++Each of the four DSP tables now retains the backing selected by the physical
++mapper when its pages are registered. Growing a table preserves existing
++bindings; changing a descriptor rebinds that page. Rewriting a table-base
++register invalidates its bindings on the APU thread, and shutdown frees them
++after that thread joins. Voice/control-structure and sample routing policies
++are unchanged. `serious_sam/tests/apu_dma_test.c` exercises mixed banks,
++collisions, partial pages, growth, descriptor replacement and re-registration.
++
+ ## Dependencies
+ 
+ - `qemu_shim.h` (from `../nv2a/`) — QEMU type abstraction layer
 diff --git a/src/apu/apu.h b/src/apu/apu.h
 index daaac64..d5059d1 100644
 --- a/src/apu/apu.h
@@ -15,8 +42,196 @@ index daaac64..d5059d1 100644
  typedef struct APUMixerVoice {
      volatile int     active;       /* 1 = playing, 0 = stopped */
      volatile int     looping;      /* 1 = loop, 0 = one-shot */
+diff --git a/src/apu/apu_core.c b/src/apu/apu_core.c
+index 0532bfc..a3ef799 100644
+--- a/src/apu/apu_core.c
++++ b/src/apu/apu_core.c
+@@ -397,6 +397,16 @@ void mcpx_apu_write(void *opaque, hwaddr addr, uint64_t val,
+         ds_stl(d->regs[NV_PAPU_FEMEMADDR], (uint32_t)val);
+         qatomic_set(&d->regs[addr], (uint32_t)val);
+         break;
++    case NV_PAPU_GPSADDR:
++    case NV_PAPU_EPSADDR:
++    case NV_PAPU_GPFADDR:
++    case NV_PAPU_EPFADDR: {
++        unsigned slot = addr == NV_PAPU_GPSADDR ? 0 : addr == NV_PAPU_EPSADDR ? 1 :
++                        addr == NV_PAPU_GPFADDR ? 2 : 3;
++        qatomic_set(&d->regs[addr], (uint32_t)val);
++        qatomic_fetch_add(&d->dsp_dma_epoch[slot], 1);
++        break;
++    }
+     default:
+         if (addr < 0x20000) {
+             qatomic_set(&d->regs[addr], (uint32_t)val);
+@@ -1029,6 +1039,7 @@ void mcpx_apu_shutdown(MCPXAPUState *d)
+     qemu_mutex_unlock(&d->lock);
+ 
+     qemu_thread_join(&d->apu_thread);
++    mcpx_apu_dsp_dma_finalize(d);
+     mcpx_apu_vp_finalize(d);
+     mcpx_apu_monitor_finalize(d);
+ 
+diff --git a/src/apu/apu_dsp.c b/src/apu/apu_dsp.c
+index 8f60a48..04cd5b0 100644
+--- a/src/apu/apu_dsp.c
++++ b/src/apu/apu_dsp.c
+@@ -327,7 +327,61 @@ static void apu_dma_tripwire(uint32_t guest, size_t len)
+     n++;
+ }
+ 
+-static void scatter_gather_rw(MCPXAPUState *d, hwaddr sge_base,
++void mcpx_apu_dsp_dma_finalize(MCPXAPUState *d)
++{
++    for (unsigned slot = 0; slot < 4; ++slot) {
++        free(d->dsp_dma_pages[slot].physical);
++        free(d->dsp_dma_pages[slot].host);
++        memset(&d->dsp_dma_pages[slot], 0, sizeof(d->dsp_dma_pages[slot]));
++    }
++}
++
++static uint8_t *dsp_page_backing(MCPXAPUState *d, uint32_t physical)
++{
++    if (!physical || (physical & (TARGET_PAGE_SIZE - 1))) return NULL;
++    /* Sam's effects buffers can be ordinary RAM. The generic scratch resolver
++     * pins any live contiguous allocation at this offset, even an unrelated
++     * model texture allocated much later. Resolve provenance when the SGE is
++     * installed, and keep that binding through subsequent bank retags. */
++    return d->physical_mapper ? d->physical_mapper(physical, TARGET_PAGE_SIZE)
++                              : dsp_dma_address(physical, TARGET_PAGE_SIZE);
++}
++
++static bool dsp_bind_pages(MCPXAPUState *d, unsigned slot, hwaddr table, uint32_t last)
++{
++    if (slot >= 4 || last >= 32768) return false;
++    uint32_t count = last + 1, epoch = qatomic_read(&d->dsp_dma_epoch[slot]);
++    if (d->dsp_dma_pages[slot].table != table || d->dsp_dma_pages[slot].epoch != epoch) {
++        free(d->dsp_dma_pages[slot].physical); free(d->dsp_dma_pages[slot].host);
++        memset(&d->dsp_dma_pages[slot], 0, sizeof(d->dsp_dma_pages[slot]));
++        d->dsp_dma_pages[slot].table = table;
++        d->dsp_dma_pages[slot].epoch = epoch;
++    }
++    if (d->dsp_dma_pages[slot].count == count) return true;
++    uint32_t *physical = calloc(count, sizeof(*physical));
++    uint8_t **host = calloc(count, sizeof(*host));
++    if (!physical || !host) { free(physical); free(host); return false; }
++    uint32_t keep = d->dsp_dma_pages[slot].count;
++    if (keep > count) keep = count;
++    if (keep) {
++        memcpy(physical, d->dsp_dma_pages[slot].physical, keep * sizeof(*physical));
++        memcpy(host, d->dsp_dma_pages[slot].host, keep * sizeof(*host));
++    }
++    /* Bind newly registered pages together, before later graphics allocations
++     * can reuse their numeric offsets. Growing the table must not unpin the
++     * GP program/control pages which were already in use. */
++    for (uint32_t page = keep; page < count; ++page) {
++        physical[page] = ldl_le_phys(address_space_memory, table + (hwaddr)page * 8);
++        host[page] = dsp_page_backing(d, physical[page]);
++    }
++    free(d->dsp_dma_pages[slot].physical); free(d->dsp_dma_pages[slot].host);
++    d->dsp_dma_pages[slot].physical = physical;
++    d->dsp_dma_pages[slot].host = host;
++    d->dsp_dma_pages[slot].count = count;
++    return true;
++}
++
++static void scatter_gather_rw(MCPXAPUState *d, unsigned slot, hwaddr sge_base,
+                               unsigned int max_sge, uint8_t *ptr, uint32_t addr,
+                               size_t len, bool dir)
+ {
+@@ -335,7 +389,10 @@ static void scatter_gather_rw(MCPXAPUState *d, hwaddr sge_base,
+     unsigned int offset_in_page = addr % TARGET_PAGE_SIZE;
+     unsigned int bytes_to_copy = TARGET_PAGE_SIZE - offset_in_page;
+ 
+-    (void)d;
++    if (!dsp_bind_pages(d, slot, sge_base, max_sge)) {
++        if (!dir) memset(ptr, 0, len);
++        return;
++    }
+ 
+     while (len > 0) {
+         /* Past the end of the page table: xemu asserts here. Writes are
+@@ -360,8 +417,16 @@ static void scatter_gather_rw(MCPXAPUState *d, hwaddr sge_base,
+         /* Only the bytes copied from this page: a whole page from a mid-page
+          * offset reaches into the next physical page, which need not be
+          * stored with this one -- the lookup then fails and the APU aborts. */
+-        uint8_t *guest = dsp_dma_address(prd_address + offset_in_page,
+-                                         bytes_to_copy);
++        if (d->dsp_dma_pages[slot].physical[page_entry] != prd_address) {
++            d->dsp_dma_pages[slot].physical[page_entry] = prd_address;
++            d->dsp_dma_pages[slot].host[page_entry] = dsp_page_backing(d, prd_address);
++        }
++        uint8_t *page = d->dsp_dma_pages[slot].host[page_entry];
++        if (!page) {
++            if (!dir) memset(ptr, 0, len);
++            return;
++        }
++        uint8_t *guest = page + offset_in_page;
+ 
+         /* Diagnostic: force DSP payload writes to ordinary RAM instead of the
+          * contiguous redirect, to test whether the write to the window is what
+@@ -470,7 +535,7 @@ static void gp_scratch_rw(void *opaque, uint8_t *ptr, uint32_t addr, size_t len,
+     MCPXAPUState *d = opaque;
+     if (dir) surround_capture(d, ptr, addr, len);
+     scratch_trace(d, "GP", d->regs[NV_PAPU_GPSADDR], addr, len, dir);
+-    scatter_gather_rw(d, d->regs[NV_PAPU_GPSADDR], d->regs[NV_PAPU_GPSMAXSGE],
++    scatter_gather_rw(d, 0, d->regs[NV_PAPU_GPSADDR], d->regs[NV_PAPU_GPSMAXSGE],
+                       ptr, addr, len, dir);
+ }
+ 
+@@ -480,7 +545,7 @@ static void ep_scratch_rw(void *opaque, uint8_t *ptr, uint32_t addr, size_t len,
+     s_dsp_dma_count[1]++;
+     MCPXAPUState *d = opaque;
+     scratch_trace(d, "EP", d->regs[NV_PAPU_EPSADDR], addr, len, dir);
+-    scatter_gather_rw(d, d->regs[NV_PAPU_EPSADDR], d->regs[NV_PAPU_EPSMAXSGE],
++    scatter_gather_rw(d, 1, d->regs[NV_PAPU_EPSADDR], d->regs[NV_PAPU_EPSMAXSGE],
+                       ptr, addr, len, dir);
+ }
+ 
+@@ -503,7 +568,7 @@ static bool fifo_empty_range(MCPXAPUState *d, const char *dsp, bool dir, unsigne
+     return true;
+ }
+ 
+-static uint32_t circular_scatter_gather_rw(MCPXAPUState *d, hwaddr sge_base,
++static uint32_t circular_scatter_gather_rw(MCPXAPUState *d, unsigned slot, hwaddr sge_base,
+                                            unsigned int max_sge, uint8_t *ptr,
+                                            uint32_t base, uint32_t end,
+                                            uint32_t cur, size_t len, bool dir)
+@@ -520,7 +585,7 @@ static uint32_t circular_scatter_gather_rw(MCPXAPUState *d, hwaddr sge_base,
+                 dir ? "write" : "read", base, end, cur, bytes_to_copy, len);
+ 
+         assert((cur >= base) && ((cur + bytes_to_copy) <= end));
+-        scatter_gather_rw(d, sge_base, max_sge, ptr, cur, bytes_to_copy, dir);
++        scatter_gather_rw(d, slot, sge_base, max_sge, ptr, cur, bytes_to_copy, dir);
+ 
+         ptr += bytes_to_copy;
+         len -= bytes_to_copy;
+@@ -572,7 +637,7 @@ static void gp_fifo_rw(void *opaque, uint8_t *ptr, unsigned int index,
+         cur = base;
+     }
+ 
+-    cur = circular_scatter_gather_rw(d,
++    cur = circular_scatter_gather_rw(d, 2,
+         d->regs[NV_PAPU_GPFADDR], d->regs[NV_PAPU_GPFMAXSGE],
+         ptr, base, end, cur, len, dir);
+ 
+@@ -639,7 +704,7 @@ static void ep_fifo_rw(void *opaque, uint8_t *ptr, unsigned int index,
+         cur = base;
+     }
+ 
+-    cur = circular_scatter_gather_rw(d,
++    cur = circular_scatter_gather_rw(d, 3,
+         d->regs[NV_PAPU_EPFADDR], d->regs[NV_PAPU_EPFMAXSGE],
+         ptr, base, end, cur, len, dir);
+ 
+@@ -990,4 +1055,4 @@ void mcpx_apu_dsp_frame(MCPXAPUState *d,
+     } else {
+         dsp_frame_stub(d, mixbins);
+     }
+-}
+\ No newline at end of file
++}
 diff --git a/src/apu/apu_state.h b/src/apu/apu_state.h
-index 342f1f8..287570d 100644
+index 342f1f8..50ed707 100644
 --- a/src/apu/apu_state.h
 +++ b/src/apu/apu_state.h
 @@ -326,6 +326,9 @@ typedef struct MCPXAPUVPState {
@@ -29,6 +244,33 @@ index 342f1f8..287570d 100644
  
      struct {
          int current_entry;
+@@ -413,6 +416,18 @@ struct MCPXAPUState {
+         void *stream; /* SDL_AudioStream* - stubbed */
+         int queued_bytes_low, queued_bytes_high;
+     } monitor;
++
++    /* GP/EP scratch and FIFO page bindings. A physical page number can name
++     * different ordinary/contiguous backing in the host; retain the bank the
++     * SGE described, rather than retarget DMA when graphics later allocates
++     * the same numeric offset. Only the APU frame thread mutates these. */
++    struct {
++        hwaddr table;
++        uint32_t epoch, count;
++        uint32_t *physical;
++        uint8_t **host;
++    } dsp_dma_pages[4];
++    uint32_t dsp_dma_epoch[4]; /* register writers invalidate without freeing */
+ };
+ 
+ /* ============================================================
+@@ -427,6 +442,7 @@ void mcpx_apu_vp_reset(MCPXAPUState *d);
+ 
+ /* DSP functions */
+ void mcpx_apu_dsp_init(MCPXAPUState *d);
++void mcpx_apu_dsp_dma_finalize(MCPXAPUState *d);
+ void mcpx_apu_dsp_ack_frame(MCPXAPUState *d);
+ void mcpx_apu_update_dsp_preference(MCPXAPUState *d);
+ void mcpx_apu_dsp_frame(MCPXAPUState *d, float mixbins[NUM_MIXBINS][NUM_SAMPLES_PER_FRAME]);
 diff --git a/src/apu/apu_vp.c b/src/apu/apu_vp.c
 index 5888190..9fe4887 100644
 --- a/src/apu/apu_vp.c

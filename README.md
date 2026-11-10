@@ -10,6 +10,12 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- Model texture correction (2026-11-10): DSP effects-buffer writes could be
+  redirected into character textures when ordinary and contiguous RAM shared
+  an address number. DSP scratch/FIFO pages now retain their original memory
+  backing. The eleven-test suite includes mixed-bank DMA regressions; isolated
+  gameplay verifies the Beheaded enemy's pants atlas against the disc data.
+
 - Stability fixes (2026-11-10): audio updates now wait only for the affected
   voice's mixer slice, locked voices stop advancing, and stale completion
   notifications cannot retire restarted sounds. Short one-shots retain their
@@ -216,8 +222,8 @@ per-game analysis directories, excludes manual overrides, and backs up existing
 generated C under `analysis/` before regeneration. Analysis, game data and generated
 C are ignored by Git. The Turok runtime is never used as a shared output directory.
 
-The runtime fixes above are local `serious-sam` commits `af664e0` (audio) and
-`fd2954b` (shader caches). For an earlier runtime at `f5f395f`, the same changes
+The runtime fixes above are local `serious-sam` commits `af664e0` (audio),
+`fd2954b` (shader caches) and `bee76c6` (DSP memory ownership). For an earlier runtime at `f5f395f`, the same changes
 are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
 before building if those fixes are absent:
 
@@ -236,7 +242,7 @@ Run the title and runtime integration regressions after the Release build:
 
 The audio checks use generated PCM and the renderer checks use D3D11 WARP.
 They cover lock handoff, voice restarts, sound overlap, final samples, shader
-layout identity, failed-shader caching and extraction errors as well as the
+layout identity, failed-shader caching, DSP page ownership and extraction errors as well as the
 existing stream, menu, controls, settings and lightmap checks.
 
 ## Running and diagnostics
