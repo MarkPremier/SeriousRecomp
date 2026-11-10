@@ -23,6 +23,15 @@ void (*pc_controls_dispatch(uint32_t address))(void) {(void)address;return 0;}
 void sub_00030710_gen(void) {}
 void sub_00030D00_gen(void) {}
 void sub_00070810_gen(void) {}
+uint32_t pc_movement_player, pc_movement_action;
+unsigned pc_movement_calls, pc_alive_calls;
+void sub_0007CF20_gen(void) {
+    extern RECOMP_TLS uint32_t g_ecx, g_eax;
+    ++pc_alive_calls; g_ecx=0x12345678; g_eax=77; g_esp+=8;
+}
+void pc_controls_update_movement(uint32_t player,uint32_t action) {
+    pc_movement_player=player;pc_movement_action=action;++pc_movement_calls;
+}
 void sub_0002B6BE_gen(void) {++pc_menu_draw_calls;g_esp+=4;}
 float pc_controls_view_wide(void) {return 1.0f;}
 void sub_001D1C00_gen(void) {}

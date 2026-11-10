@@ -2036,3 +2036,54 @@ used for the conclusion. Evidence and raw CSVs are under
 settings and shader caches. No gameplay physics or settings were changed;
 the user was asked whether to add an optional Original / Responsive keyboard
 movement mode, since that would deliberately change the original feel.
+
+## 2026-11-11: optional Responsive keyboard movement
+
+The user approved an Original / Responsive choice. **Options > PC Controls >
+Keyboard move** now persists that choice as `[pc_controls]
+keyboard_movement=Original|Responsive`. Original remains the default and is
+restored by Restore defaults; unknown INI values also select Original.
+
+The wrapper around the Xbox alive-action routine `0x7CF20` first runs its
+unchanged generated body, then raises the local keyboard player's positive
+acceleration/braking rates to 1000 in Responsive mode. Target velocity and
+maximum speed remain unchanged. Keyboard ownership lasts 200 ms after the
+last movement key, allowing quicker braking, and live controller movement
+clears it even when a keyboard direction is also held. A prediction copy
+must share the local player's persistent entity ID. Dead players, scripted
+camera/auto-actions, swimming, falling and jumping keep their original rates.
+
+Live jumping exposed that state +0x3D0 can still say standing after takeoff.
+The helper therefore also requires the ground reference at +0x138, which the
+Xbox routine uses to reset its fall timer, and rejects the initial jump
+action. The new no-ground-reference regression failed before this guard and
+passes afterward. All eleven CTests pass, including movement exclusions,
+controller priority, persistence/defaults and a wrapper ABI check that
+clobbers ECX and pops the action argument in the original callee. Full
+regeneration preserves the wrapper through the exact `_gen` declaration and
+the existing `--exclude-manual src/recomp_manual.c` pipeline.
+
+Matched six-release Hatshepsut trials in the first feature build measured
+camera stopping at 168-218 ms (median 176.5 ms) in Original and 14-59 ms
+(median 36.0 ms) in Responsive. Maximum horizontal speed was 10 in both;
+health remained 100. The native PC Controls capture shows the new row and
+value fitting the scrolling page. These are internal applied-key-to-camera
+measurements; they do not measure physical key-to-photon latency or change
+the original 20 Hz simulation. Evidence is under
+`analysis/responsive_movement_20261111`.
+
+The final build's native run verified keyboard-to-controller handoff and
+jumping (including releasing Jump while still airborne), then repeated all
+six releases: Responsive stopping was 25-34 ms, median 31.0 ms, with the same
+maximum speed 10 and health 100. Native menu left/right changed Original to
+Responsive and back through the saved INI; `responsive/capture_1.bmp` shows
+the final Responsive row. `responsive/native_scenarios.json` records the
+ground-reference and movement-rate checks. Earlier Responsive samples are
+retained as `keyboard_samples_before_ground_guard.csv`.
+
+The installed Release executable SHA-256 is
+`862891C96EC06DAC494E07F1373783706330F7E9A2D357C975B518604221AC65`.
+Tests used private portable game data, UDATA/TDATA, sparse partition images,
+settings and a copy of the warm shader cache. All owned test games were
+closed. User saves and settings were not changed; the verified save backup
+above is retained. No runtime or Turok files were changed by this feature.

@@ -189,6 +189,64 @@ static void native_mouse_test(void)
     WORD(menu+SCREEN_GADGETS)=0;WORD(ACTIVE_MENU)=0;pointer_on=0;
 }
 
+static void movement_mode_test(uint32_t profile, const char *path)
+{
+    char label[64];
+    const uint32_t player=0x700300, action=0x720000, other=0x710000;
+    WORD(ACTIVE_MENU)=0;capturing=-1;enabled=1;memset(down,0,sizeof down);
+    memset(blocked,0,sizeof blocked);clear_axes();pc_controls_input_begin(profile);pc_controls_input_end();
+    WORD(player)=PLAYER_VTABLE;WORD(player+0x10)=8;WORD(player+0x1C)=123;
+    WORD(player+0x138)=0x730000;
+    WORD(player+0x3D0)=0;WORD(player+PLAYER_CAMERA)=0;WORD(player+0x1074)=0;
+    FLOAT(action+4)=0;FLOAT(0x407AD8)=10;
+    for(int i=0;i<BIND_COUNT;++i)keys[i]=actions[i].key;
+    responsive_movement=0;clear_axes();down['W']=1;
+    pc_controls_input_begin(profile);pc_controls_input_end();
+    FLOAT(player+0x1A4)=100;FLOAT(player+0x1A8)=60;
+    pc_controls_update_movement(player,action);
+    CHECK(FLOAT(player+0x1A4)==100 && FLOAT(player+0x1A8)==60);
+    responsive_movement=1;pc_controls_update_movement(player,action);
+    CHECK(FLOAT(player+0x1A4)==1000 && FLOAT(player+0x1A8)==1000 && FLOAT(0x407AD8)==10);
+    /* Braking belongs to the keyboard briefly after release. */
+    down['W']=0;clear_axes();pc_controls_input_begin(profile);pc_controls_input_end();
+    FLOAT(player+0x1A4)=100;FLOAT(player+0x1A8)=60;pc_controls_update_movement(player,action);
+    CHECK(FLOAT(player+0x1A8)==1000);
+    for(unsigned state=0;state<=4;++state) {
+        WORD(player+0x3D0)=state;FLOAT(player+0x1A4)=100;FLOAT(player+0x1A8)=60;
+        pc_controls_update_movement(player,action);
+        CHECK(FLOAT(player+0x1A8)==(state<=1?1000:60));
+    }
+    WORD(player+0x3D0)=0;
+    const uint32_t exclusions[]={0x10,0x138,PLAYER_CAMERA,0x1074};
+    for(unsigned i=0;i<4;++i) {
+        uint32_t saved=WORD(player+exclusions[i]);WORD(player+exclusions[i])=i<2?0:0x730000;
+        FLOAT(player+0x1A4)=100;FLOAT(player+0x1A8)=60;pc_controls_update_movement(player,action);
+        CHECK(FLOAT(player+0x1A4)==100 && FLOAT(player+0x1A8)==60);WORD(player+exclusions[i])=saved;
+    }
+    FLOAT(action+4)=11;FLOAT(player+0x1A8)=60;pc_controls_update_movement(player,action);
+    CHECK(FLOAT(player+0x1A8)==60);FLOAT(action+4)=0;
+    memcpy(PTR(other),PTR(player),0x2BE8);WORD(other+0x10)=8|0x20000;
+    FLOAT(other+0x1A4)=100;FLOAT(other+0x1A8)=60;pc_controls_update_movement(other,action);
+    CHECK(FLOAT(other+0x1A8)==1000); /* Same local entity's prediction copy. */
+    WORD(other+0x1C)=124;FLOAT(other+0x1A8)=60;pc_controls_update_movement(other,action);
+    CHECK(FLOAT(other+0x1A8)==60); /* Another player's movement is untouched. */
+    pc_controls_update_movement(0xFFFFFFFC,action);pc_controls_update_movement(player,0xFFFFFFFC);
+    /* A live stick, even alongside a PC key, keeps original controller feel. */
+    down['W']=1;clear_axes();FLOAT(0x480474)=0.5f;
+    pc_controls_input_begin(profile);pc_controls_input_end();CHECK(!keyboard_move_player);
+    FLOAT(player+0x1A8)=60;pc_controls_update_movement(player,action);CHECK(FLOAT(player+0x1A8)==60);
+    clear_axes();pc_controls_input_begin(profile);pc_controls_input_end();CHECK(keyboard_move_player);
+    keyboard_move_until=(LONG)(GetTickCount()-1);FLOAT(player+0x1A8)=60;
+    pc_controls_update_movement(player,action);CHECK(FLOAT(player+0x1A8)==60 && !keyboard_move_player);
+    down['W']=0;clear_axes();responsive_movement=1;save();responsive_movement=0;pc_controls_load();CHECK(responsive_movement==1);
+    WritePrivateProfileStringA("pc_controls","keyboard_movement","invalid",path);pc_controls_load();CHECK(!responsive_movement);
+    selected=MOVEMENT_ROW;change_row(1);CHECK(responsive_movement);
+    CHECK(strstr((char *)PTR(WORD(values[MOVEMENT_ROW]+GADGET_TEXT)),"Responsive"));
+    selected=DEFAULTS_ROW;change_row(1);CHECK(!responsive_movement);
+    GetPrivateProfileStringA("pc_controls","keyboard_movement","",label,sizeof label,path);
+    CHECK(!strcmp(label,"Original"));
+}
+
 int main(void)
 {
     char temp[MAX_PATH],path[MAX_PATH],label[64];
@@ -384,6 +442,7 @@ int main(void)
     }
     menu_draw_seen=0;WORD(ACTIVE_MENU)=0;
     native_mouse_test();
+    movement_mode_test(profile,path);
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }

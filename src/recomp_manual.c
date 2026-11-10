@@ -26,6 +26,7 @@ extern void sub_003041E0_gen(void);
 extern void sub_00030710_gen(void);
 extern void sub_00030D00_gen(void);
 extern void sub_00070810_gen(void);
+extern void sub_0007CF20_gen(void);
 extern void sub_0002B6BE_gen(void);
 extern void sub_0002A089_gen(void);
 extern void sub_001D1C00_gen(void);
@@ -68,6 +69,13 @@ void sub_00070810(void)
     int injected = pc_controls_input_begin(GUEST32(g_esp + 4));
     sub_00070810_gen();
     if (injected) pc_controls_input_end();
+}
+
+void sub_0007CF20(void)
+{
+    uint32_t player = g_ecx, action = GUEST32(g_esp + 4);
+    sub_0007CF20_gen();
+    pc_controls_update_movement(player, action);
 }
 
 /* Paused gameplay can present without entering either vblank wait. Refresh

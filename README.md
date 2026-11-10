@@ -77,6 +77,11 @@ your own disc image, and the C code is generated from it on your machine.
 - Keyboard/mouse controls are enabled by default. **Options > PC Controls** is
   available from the main menu and the gameplay pause menu, with rebinding,
   mouse speed, invert Y and remembered settings. Xbox input remains available.
+- **PC Controls > Keyboard move** offers **Original** (default) and
+  **Responsive**. Responsive sharpens keyboard acceleration and braking on
+  the ground, preserving top speed, jumping, swimming and controller rates.
+  It persists as `[pc_controls] keyboard_movement=Responsive` in the settings
+  INI. The original 20 Hz simulation timing remains.
 - **Options > PC Settings** controls render resolution, aspect ratio
   (widescreen and ultrawide, Hor+), fullscreen, VSync, frame limit,
   anisotropic filtering and MSAA, with live changes and saved choices.
