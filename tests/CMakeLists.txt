@@ -46,6 +46,17 @@ target_include_directories(fprem_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINA
 add_test(NAME fprem COMMAND fprem_test)
 set_tests_properties(fprem PROPERTIES TIMEOUT 2)
 
+if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+  enable_language(ASM_MASM)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/extract_math_safety.py"
+      "${SAM_GEN}/recomp_0056.c" "${XBOXRECOMP_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/sam_math_safety.inc"
+      COMMAND_ERROR_IS_FATAL ANY)
+  add_executable(math_safety_test math_safety_test.c math_native_reference.asm)
+  target_include_directories(math_safety_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINARY_DIR}")
+  add_test(NAME math_safety COMMAND math_safety_test)
+  set_tests_properties(math_safety PROPERTIES TIMEOUT 10)
+endif()
+
 # Exercise the real runtime with synthetic PCM and D3D11 WARP, without saves
 # or game data. Build the Release runtime first for its resampler library.
 set(SAM_RUNTIME_BUILD_DIR "${CMAKE_CURRENT_LIST_DIR}/../build/xboxrecomp" CACHE PATH "Built runtime libraries")

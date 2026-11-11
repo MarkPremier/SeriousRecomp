@@ -10,6 +10,12 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- A further math-safety review corrected stale trig completion status and
+  out-of-range stack behavior, unsafe scale-exponent conversions and
+  unmasked logical-shift counts. Thirteen title tests pass, including
+  17,587 math/boundary checks using native x87 results and the generated
+  CRT sine path, plus the earlier combat-freeze regression.
+
 - A combat freeze while firing the laser was traced in the live game to the
   CRT remainder loop retaining an old floating-point completion flag. The
   translator now clears that flag after completing a remainder and makes
@@ -236,7 +242,8 @@ C are ignored by Git. The Turok runtime is never used as a shared output directo
 
 The runtime fixes above are local `serious-sam` commits `af664e0` (audio),
 `fd2954b` (shader caches), `bee76c6` (DSP memory ownership) and `9821b58`
-(remainder completion and SAHF flags). For an earlier runtime at `f5f395f`, the same changes
+(remainder completion and SAHF flags), with the subsequent math-safety
+fixes through `0263c30`. For an earlier runtime at `f5f395f`, the same changes
 are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
 before building if those fixes are absent:
 

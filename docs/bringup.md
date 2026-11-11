@@ -2181,3 +2181,81 @@ PC Controls page ending in Mouse speed, Invert mouse Y and Restore defaults,
 with no movement row. Private saves/settings/cache were used and the owned
 test process was closed. User saves and settings were not modified. The
 combat-freeze correction remains included; no runtime or Turok source changed.
+
+## Review of related math and status hazards
+
+Following the captured remainder-loop freeze, the user requested a review
+for similar failures. The review targeted the generated math/status paths
+and nearby C operations rather than treating older log warnings as causes.
+Three additional defects were reproduced and corrected in the isolated
+runtime, with one local commit per fix:
+
+- `fe33316`: FSIN, FCOS, FSINCOS and FPTAN retained an old C2 flag after a
+  successful operation. Sam's real CRT sine helper `0x2B50F1` interpreted
+  that as failed range reduction and processed the already calculated sine
+  again: input 0.5 returned about 0.461269555 instead of 0.479425539. The
+  translator now clears C2 on completion and reports finite arguments of
+  magnitude at least 2^63 as out of range, retaining ST(0) and avoiding the
+  extra push. FPTAN also propagates the NaN result into both slots for
+  invalid inputs, matching the native CPU reference instead of pushing 1.
+- `9ddfaef`: FSCALE converted its exponent directly from double to int.
+  Large positive exponents could become INT_MIN and underflow to zero;
+  NaN/infinity conversions also had undefined C behavior. A bounded helper
+  truncates finite exponents safely and handles NaN, infinity and signed
+  zero explicitly. Native FSCALE confirmed the special-value results.
+- `0263c30`: logical SHL/SHR counts were not masked to five bits, unlike
+  the already guarded SAR/double-shift paths. This allowed undefined C
+  shifts and negative carry-bit indices. Values now shift as unsigned,
+  counts are masked, zero-count immediates preserve the incoming condition,
+  and narrow left shifts avoid invalid carry expressions for large counts.
+  Compiler warnings for invalid shift counts disappeared in the new build.
+
+The trig range/completion behavior is also documented in Intel's
+[instruction-set manual](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2a-manual.pdf).
+The new MSVC/x64 math fixture executes native x87 instructions as the
+independent reference for trig status, stack depth and scale results. It
+saves/restores the host FP/SSE environment around those reference calls.
+Logical shifts are swept against unsigned bit/reference results at 8, 16
+and 32 bits for all 256 CL counts, including preserved zero-count carry,
+defined carry cases and a constant count of 61. The fixture also extracts
+the user's actual generated CRT sine helper without committing disc code.
+
+The initial combined fixture had 347 failing boundary checks. After the
+fixes and additional range-boundary cases, all 17,587 checks pass. All
+thirteen title CTests pass, including the existing captured-state remainder
+loop, audio, DMA, renderer and controls regressions. The focused translator
+suite ran 62 tests with five compiler-dependent skips; the four newly split
+code-generation checks were also run successfully after their commits.
+The compiled MSVC/native-x87 fixture supplies numeric coverage independently
+of those unavailable compiler helpers.
+
+The review also checked the guarded FIST/rounding helpers and the current
+title's instruction inventory. There are 152 FSIN, 69 FCOS, two FSINCOS,
+eight FPTAN and eighteen FSCALE sites. There are no FCOMI/FUCOMI-family
+instructions in this title, and none of the 720 generated integer divide
+sites use an EAX-dependent divisor; broader changes to those unused alias
+cases were not made. This is not full ISA conformance, exception emulation
+or a whole-engine crash audit. The independently reproduced NVIDIA
+cold-cache shader compiler failure remains unresolved.
+
+A complete private regeneration translated 35,114 routines with zero
+failures and nine unresolved stubs. Sixty-seven changed generated files
+were installed after checking that every routine partition/definition name
+was preserved. The runtime patch relative to `f5f395f` includes the three
+commits above, and its reverse-application check succeeds. The pre-existing
+`xbox_memory_layout.c` working-tree modification remains outside the patch.
+
+Evidence, the old executable/map, generated-code backup, before/after test
+results and the private Dunes game are retained under
+`analysis/math_audit_20261112`. The Release executable SHA-256 is
+`F6A1F5838A954587E89FC9B7E2118392DFCDA76086ED7E196DD075D9E82E9C55`.
+
+The rebuilt normal executable completed a 125-second private Dunes launch,
+including sustained firing, strafing and forward movement, without an
+observed hang or crash. Gameplay continued near the selected 120 fps cap;
+the final capture still shows health 100. This is a short scene check, not
+a whole-game soak or a reproduction of every enemy encounter. The copied
+UDATA/TDATA, sparse partition images, settings and warm shader cache were
+private. All ten original save files and the user's INI still match their
+pre-test snapshot. The owned test process was closed. Changes are committed
+locally; nothing was published, and Turok sources were untouched.

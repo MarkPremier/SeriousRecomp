@@ -792,8 +792,54 @@ index a633733..76128fb 100644
  }
  
  template<typename SurfaceType>
+diff --git a/templates/runtime/recomp_types.h b/templates/runtime/recomp_types.h
+index 9c8ce19..7b0bad6 100644
+--- a/templates/runtime/recomp_types.h
++++ b/templates/runtime/recomp_types.h
+@@ -60,6 +60,7 @@
+  * CMakeLists) -- MSVC's C4013 was emitted and discarded. Same failure as the
+  * missing stdlib.h in kernel_bridge.c, in a hotter path. */
+ #include <math.h>
++#include <limits.h>
+ #include <fenv.h>
+ #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+ #include <xmmintrin.h>
+@@ -319,6 +320,33 @@ static inline uint16_t recomp_fxam(double value) {
+          value == 0.0 ? 0x4000u : 0x0400u));
+ }
+ 
++/* Trig instructions report failed range reduction through C2 and do not
++ * change ST(0) or push a second result in that case. Completed operations
++ * must clear C2, even when it was set by an earlier FXAM/compare. */
++static inline int recomp_trig_ready(double value) {
++    if (isfinite(value) && fabs(value) >= 0x1p63) {
++        g_fp_cc |= 0x0400u;
++        return 0;
++    }
++    g_fp_cc &= (uint16_t)~0x0400u;
++    return 1;
++}
++
++/* FSCALE truncates the exponent toward zero, independently of RC. Bound it
++ * before converting to int: a large positive exponent must overflow upward,
++ * rather than becoming INT_MIN (or invoking an undefined C conversion). */
++static inline double recomp_fscale(double value, double exponent) {
++    int shift;
++    if (isnan(value) || isnan(exponent)) return value + exponent;
++    if (isinf(exponent)) {
++        if (exponent > 0.0) return value == 0.0 ? NAN : copysign(INFINITY, value);
++        return isinf(value) ? NAN : copysign(0.0, value);
++    }
++    shift = exponent >= (double)INT_MAX ? INT_MAX :
++            exponent <= (double)INT_MIN ? INT_MIN : (int)exponent;
++    return ldexp(value, shift);
++}
++
+ /* Result of an x87 compare, in the shape the status word wants:
+  *   -1 less, 0 equal, 1 greater, 2 unordered (either operand is NaN).
+  * The unordered case is not a curiosity: `fucompp` of a value with itself
 diff --git a/tools/recomp/lifter.py b/tools/recomp/lifter.py
-index 09dc60b..3d9f2ed 100644
+index 09dc60b..d5d6be5 100644
 --- a/tools/recomp/lifter.py
 +++ b/tools/recomp/lifter.py
 @@ -572,7 +572,7 @@ def _make_condition(jcc, flag_setter, flag_ops):
@@ -834,7 +880,57 @@ index 09dc60b..3d9f2ed 100644
          if m == "shld":
              return self._lift_shld(insn, ops)
          if m == "shrd":
-@@ -3907,7 +3918,8 @@ class Lifter:
+@@ -2294,14 +2305,22 @@ class Lifter:
+         if len(ops) < 2:
+             return [f"/* shift: bad operands */"]
+         dst = _fmt_operand_read(ops[0])
+-        cnt = _fmt_operand_read(ops[1])
++        if ops[1].type == "imm" and (ops[1].imm & 31) == 0:
++            return [f"/* {insn.mnemonic}: masked count zero, value and flags unchanged */"]
++        cnt = (str(ops[1].imm & 31) if ops[1].type == "imm" else
++               f"((uint32_t)({_fmt_operand_read(ops[1])}) & 31u)")
+         out = []
+         if self.needs_cf:
+             w = (_operand_width(ops[0]) or 4) * 8
+             # CF is the last bit shifted out; a zero count leaves CF alone.
+             bit = f"({cnt}) - 1" if c_op == ">>" else f"{w} - ({cnt})"
+-            out.append(f"if ({cnt}) _cf = (int)((({dst}) >> ({bit})) & 1);")
+-        out.append(_fmt_operand_write(ops[0], f"{dst} {c_op} {cnt}"))
++            # Narrow left shifts past the width have undefined hardware CF;
++            # choose zero without creating a negative C shift count.
++            carry = f"(((uint32_t)({dst}) >> ({bit})) & 1u)"
++            if c_op == "<<" and w < 32:
++                carry = f"(({cnt}) <= {w} ? {carry} : 0u)"
++            out.append(f"if ({cnt}) _cf = (int)({carry});")
++        out.append(_fmt_operand_write(ops[0], f"(uint32_t)({dst}) {c_op} {cnt}"))
+         out.append(self._result_snapshot(ops, "shift"))
+         return out
+ 
+@@ -3877,18 +3896,19 @@ class Lifter:
+         # real x87 are not reproduced -- fp_stack is double -- which is the same
+         # approximation every other op here already makes.
+         if m == "fsin":
+-            return [f"fp_top() = sin(fp_top()); /* fsin */"]
++            return ["if (recomp_trig_ready(fp_top())) fp_top() = sin(fp_top()); /* fsin */"]
+         if m == "fcos":
+-            return [f"fp_top() = cos(fp_top()); /* fcos */"]
++            return ["if (recomp_trig_ready(fp_top())) fp_top() = cos(fp_top()); /* fcos */"]
+         if m == "fsincos":
+             # Replaces st0 with sin, then pushes cos. Order matters: the push
+             # must see the sine already stored.
+-            return [f"{{ double _a = fp_top(); fp_top() = sin(_a);"
++            return [f"if (recomp_trig_ready(fp_top())) {{ double _a = fp_top(); fp_top() = sin(_a);"
+                     f" fp_push(cos(_a)); }} /* fsincos */"]
+         if m == "fptan":
+             # st0 = tan(st0), then push 1.0. The constant push is not decoration:
+             # callers use it as the denominator of a subsequent fdiv.
+-            return [f"{{ fp_top() = tan(fp_top()); fp_push(1.0); }} /* fptan */"]
++            return ["if (recomp_trig_ready(fp_top())) { double _a = tan(fp_top());"
++                    " fp_top() = _a; fp_push(isnan(_a) ? _a : 1.0); } /* fptan */"]
+         if m == "fpatan":
+             # st1 = atan2(st1, st0), pop. Argument order is st1 over st0.
+             return [f"{{ fp_st1() = atan2(fp_st1(), fp_top()); fp_pop(); }}"
+@@ -3907,9 +3927,10 @@ class Lifter:
              # fprem truncates toward zero, fprem1 rounds to nearest (IEEE), which
              # is the difference between fmod and remainder.
              fn = "fmod" if m == "fprem" else "remainder"
@@ -842,8 +938,21 @@ index 09dc60b..3d9f2ed 100644
 +            return [f"fp_top() = {fn}(fp_top(), fp_st1());"
 +                    f" g_fp_cc &= (uint16_t)~0x0400u; /* {m}: complete, clear C2 */"]
          if m == "fscale":
-             return [f"fp_top() = ldexp(fp_top(), (int)fp_st1()); /* fscale */"]
+-            return [f"fp_top() = ldexp(fp_top(), (int)fp_st1()); /* fscale */"]
++            return [f"fp_top() = recomp_fscale(fp_top(), fp_st1()); /* fscale */"]
          if m == "frndint":
+             # Rounds under the guest's x87 RC bits, like FIST. rint() used the
+             # host's rounding mode, which the guest's fldcw never reaches, so
+@@ -4241,6 +4262,9 @@ def lift_basic_block(lifter, bb, flag_state=None):
+             last_flag_ops = list(curr.operands)
+         elif curr.mnemonic in _SSE_CMP_NAMED:
+             pass  # SSE compares write a mask, not EFLAGS
++        elif (curr.mnemonic in ("shl", "sal", "shr") and curr.operands
++              and curr.operands[-1].type == "imm" and (curr.operands[-1].imm & 31) == 0):
++            pass  # A masked zero-count shift does not replace the incoming flags.
+         elif curr.mnemonic in FLAG_SETTERS:
+             last_flag_setter, last_flag_ops = normalise_zero_test(
+                 curr.mnemonic, list(curr.operands))
 diff --git a/tools/recomp/test_fpu_branch.py b/tools/recomp/test_fpu_branch.py
 index b76cb3c..35a4f41 100644
 --- a/tools/recomp/test_fpu_branch.py
@@ -908,3 +1017,85 @@ index 52e81a5..e1bf3f3 100644
 -        self.assertIn("g_fp_cmp == 2", jp)
 +        self.assertIn("g_eflags & 0x4u", jp)
 +        self.assertNotIn("g_fp_cmp", jp)
+diff --git a/tools/recomp/test_lifter_logical_shift.py b/tools/recomp/test_lifter_logical_shift.py
+new file mode 100644
+index 0000000..72d3ba2
+--- /dev/null
++++ b/tools/recomp/test_lifter_logical_shift.py
+@@ -0,0 +1,33 @@
++import unittest
++from .disasm import BasicBlock, Instruction, Operand
++from .lifter import Lifter, lift_basic_block
++
++
++class LogicalShiftTest(unittest.TestCase):
++    def test_counts_are_masked_and_values_are_unsigned(self):
++        for mnemonic in ("shl", "shr"):
++            for register in ("al", "ax", "eax"):
++                instruction = Instruction(0, 2, mnemonic, "", "", operands=[
++                    Operand(type="reg", reg=register), Operand(type="reg", reg="cl")])
++                lifter = Lifter()
++                lifter.needs_cf = True
++                text = " ".join(lifter.lift_instruction(instruction))
++                self.assertIn("& 31u", text)
++                self.assertIn("(uint32_t)(", text)
++                if mnemonic == "shl" and register != "eax":
++                    self.assertIn("?", text)
++
++    def test_masked_zero_preserves_the_incoming_condition(self):
++        compare = Instruction(0, 3, "cmp", "eax, 7", "", operands=[
++            Operand(type="reg", reg="eax"), Operand(type="imm", imm=7)])
++        shift = Instruction(3, 3, "shr", "edx, 32", "", operands=[
++            Operand(type="reg", reg="edx"), Operand(type="imm", imm=32)])
++        branch = Instruction(6, 2, "je", "0x10", "", jump_target=0x10)
++        text = "\n".join(lift_basic_block(Lifter(), BasicBlock(
++            start=0, instructions=[compare, shift, branch]))[0])
++        self.assertIn("masked count zero", text)
++        self.assertIn("CMP_EQ(_fa, _fb)", text)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/recomp/test_lifter_scale.py b/tools/recomp/test_lifter_scale.py
+new file mode 100644
+index 0000000..2a07cbd
+--- /dev/null
++++ b/tools/recomp/test_lifter_scale.py
+@@ -0,0 +1,14 @@
++import unittest
++from .disasm import Instruction
++from .lifter import Lifter
++
++
++class ScaleLifterTest(unittest.TestCase):
++    def test_scale_does_not_cast_an_unbounded_exponent(self):
++        text = " ".join(Lifter().lift_instruction(Instruction(0, 2, "fscale", "", "")))
++        self.assertIn("recomp_fscale(fp_top(), fp_st1())", text)
++        self.assertNotIn("(int)fp_st1()", text)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/recomp/test_lifter_trig_status.py b/tools/recomp/test_lifter_trig_status.py
+new file mode 100644
+index 0000000..4e69412
+--- /dev/null
++++ b/tools/recomp/test_lifter_trig_status.py
+@@ -0,0 +1,17 @@
++"""Paired with Sam's native x87 reference and real CRT sine regression."""
++import unittest
++from .disasm import Instruction
++from .lifter import Lifter
++
++
++class TrigStatusTest(unittest.TestCase):
++    def test_range_check_precedes_computing_or_pushing(self):
++        for mnemonic in ("fsin", "fcos", "fsincos", "fptan"):
++            text = " ".join(Lifter().lift_instruction(Instruction(0, 2, mnemonic, "", "")))
++            self.assertTrue(text.startswith("if (recomp_trig_ready(fp_top()))"))
++        tangent = " ".join(Lifter().lift_instruction(Instruction(0, 2, "fptan", "", "")))
++        self.assertIn("fp_push(isnan(_a) ? _a : 1.0)", tangent)
++
++
++if __name__ == "__main__":
++    unittest.main()
