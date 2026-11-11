@@ -2039,6 +2039,10 @@ movement mode, since that would deliberately change the original feel.
 
 ## 2026-11-11: optional Responsive keyboard movement
 
+This option was subsequently removed at the user's request; see "Restore
+original movement as the only behavior" below. This section records the
+earlier implementation and measurements.
+
 The user approved an Original / Responsive choice. **Options > PC Controls >
 Keyboard move** now persists that choice as `[pc_controls]
 keyboard_movement=Original|Responsive`. Original remains the default and is
@@ -2152,3 +2156,28 @@ The installed Release executable SHA-256 is
 `FAE38EA4874B7F783E2850B25A00B112C8E999CE91834174B83021C3553EDA51`.
 The source and runtime changes are committed locally; no release was
 published and no runtime branch was pushed. Turok files were untouched.
+
+## Restore original movement as the only behavior
+
+The user preferred the default movement and requested removal of Responsive.
+The PC Controls row, INI parsing/writing, keyboard-ownership tracking and
+acceleration/braking override have been removed. Old `keyboard_movement`
+entries are ignored. The alive-action routine `0x7CF20` is again called
+directly, with its generated definition restored to the original name;
+future regeneration no longer aliases it as a manual wrapper. The retired
+option's tests/stubs were removed along with its implementation.
+
+All twelve title regression tests pass, including the CRT remainder freeze
+regression. The previous executable/map are retained in
+`analysis/remove_responsive_20261112`. The installed Release executable
+SHA-256 is
+`8F30B4698DBBB8682C045006AD16D5FC10B08CD83E72900427DC37CBF77825E2`.
+
+A normal private Dunes launch verified acceleration 100 and braking 60 while
+using a deliberately stale `keyboard_movement=Responsive` test INI. The
+Release map contains none of the removed override/ownership symbols.
+`analysis/remove_responsive_20261112/normal_check/capture_2.bmp` shows the
+PC Controls page ending in Mouse speed, Invert mouse Y and Restore defaults,
+with no movement row. Private saves/settings/cache were used and the owned
+test process was closed. User saves and settings were not modified. The
+combat-freeze correction remains included; no runtime or Turok source changed.

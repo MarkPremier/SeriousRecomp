@@ -13,9 +13,6 @@ int xbox_GetPresentInterval(void){return interval;}
 void sub_003041E0(void);
 void sub_0002B6BE(void);
 void sub_0002A089(void);
-void sub_0007CF20(void);
-extern uint32_t pc_movement_player,pc_movement_action;
-extern unsigned pc_movement_calls,pc_alive_calls;
 extern unsigned pc_frame_calls,pc_menu_draw_calls;
 extern uint32_t pc_hovered_shortcut,pc_text_effect;
 extern unsigned pc_text_calls;
@@ -70,11 +67,5 @@ int main(void){
  sub_0002B6BE(); /* Pause rendering need not enter a presentation wait. */
  CHECK(pc_frame_calls==1 && pc_menu_draw_calls==1 && g_esp==0x1004);
  text_hover_test();
- /* The alive-action callee may clobber ECX and pop its argument. Movement
-  * policy still receives the original player/action after that callee. */
- g_esp=0x1000;g_ecx=0x18000;WORD(g_esp+4)=0x19000;
- sub_0007CF20();
- CHECK(pc_alive_calls==1 && pc_movement_calls==1 && pc_movement_player==0x18000 && pc_movement_action==0x19000);
- CHECK(g_esp==0x1008 && g_ecx==0x12345678 && g_eax==77);
  free((void *)g_xbox_mem_offset);puts("menu presentation, movie waits and guest ABI checks passed");return 0;
 }

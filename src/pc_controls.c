@@ -152,13 +152,11 @@ static const struct {
         {"third_person", "Third-person view", 'H', 0x480548},
         {"pause", "Pause", VK_ESCAPE, 0},
 };
-enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, MOVEMENT_ROW, DEFAULTS_ROW, ROW_COUNT };
+enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, DEFAULTS_ROW, ROW_COUNT };
 /* The page's BACK button is the stop after the last row, so up/down (keys or a
  * pad) reach it as they reach the rows; Enter/A there goes back. */
 #define BACK_SELECTED ROW_COUNT
 static int keys[BIND_COUNT], speed = 5, invert_y, enabled;
-static volatile LONG responsive_movement;
-static volatile LONG keyboard_move_player, keyboard_move_until;
 /* The thread that runs the title's main loop. The boot movie's worker presents
  * through the same calls as the main loop does, and the menu work here calls
  * Sam's menu code, which only the main thread may run. */
@@ -300,7 +298,6 @@ static void save(void)
     snprintf(label, sizeof label, "%d", speed);
     WritePrivateProfileStringA("pc_controls", "mouse_speed", label, ini);
     WritePrivateProfileStringA("pc_controls", "invert_y", invert_y ? "1" : "0", ini);
-    WritePrivateProfileStringA("pc_controls", "keyboard_movement", responsive_movement ? "Responsive" : "Original", ini);
 }
 
 static void apply(void)
@@ -354,9 +351,6 @@ void pc_controls_load(void)
     speed = (int)GetPrivateProfileIntA("pc_controls", "mouse_speed", 5, ini);
     if (speed < 1 || speed > 10) speed = 5;
     invert_y = GetPrivateProfileIntA("pc_controls", "invert_y", 0, ini) == 1;
-    GetPrivateProfileStringA("pc_controls", "keyboard_movement", "Original", text, sizeof text, ini);
-    InterlockedExchange(&responsive_movement, !_stricmp(text, "Responsive"));
-    InterlockedExchange(&keyboard_move_player, 0);
     pc_settings_load(ini);
     fprintf(stderr, "[PC CONTROLS] keyboard/mouse %s; settings %s\n", enabled ? "enabled" : "disabled", ini);
 }
@@ -453,8 +447,6 @@ static void update_page(void)
             snprintf(label, sizeof label, "< %d / 10 >", speed);
         else if (i == INVERT_ROW)
             snprintf(label, sizeof label, "< %s >", invert_y ? "On" : "Off");
-        else if (i == MOVEMENT_ROW)
-            snprintf(label, sizeof label, "< %s >", responsive_movement ? "Responsive" : "Original");
         else
             snprintf(label, sizeof label, "Enter / A");
         text(values[i], label);
@@ -512,7 +504,6 @@ void pc_controls_build_menu(void)
         const char *label = i < BIND_COUNT    ? actions[i].label
                             : i == SPEED_ROW  ? "Mouse speed"
                             : i == INVERT_ROW ? "Invert mouse Y"
-                            : i == MOVEMENT_ROW ? "Keyboard move"
                                               : "Restore defaults";
         rows[i] = button(page, label, 90, 145, 0.57f);
         values[i] = button(page, "", 410, 145, 0.57f);
@@ -641,14 +632,10 @@ static void change_row(int direction)
             if (speed > 10) speed = 10;
         } else if (selected == INVERT_ROW)
             invert_y = !invert_y;
-        else if (selected == MOVEMENT_ROW)
-            InterlockedExchange(&responsive_movement, !responsive_movement);
         else {
             for (int i = 0; i < BIND_COUNT; ++i) keys[i] = actions[i].key;
             speed = 5;
             invert_y = 0;
-            InterlockedExchange(&responsive_movement, 0);
-            InterlockedExchange(&keyboard_move_player, 0);
         }
         apply();
         save();
@@ -1475,9 +1462,6 @@ int pc_controls_input_begin(uint32_t profile)
     uint32_t net = WORD(0x4A2AE0), session = net ? WORD(net + 0x14) : 0,
              players = session ? WORD(session + 0x10) : 0;
     if (!players || !WORD(players) || !WORD(players + 4)) return 0;
-    int controller_move = 0, keyboard_move = 0;
-    for (int i = FORWARD; i <= RIGHT; ++i)
-        if (fabsf(FLOAT(actions[i].address)) > 0.0001f) controller_move = 1;
     for (int i = FIRE; i < PAUSE; ++i) saved_buttons[i - FIRE] = WORD(actions[i].address);
     for (int i = 0; i < PAUSE; ++i) {
         int down = xbox_KbmInputDown(keys[i]);
@@ -1486,21 +1470,11 @@ int pc_controls_input_begin(uint32_t profile)
             continue;
         }
         if (down) {
-            if (i <= RIGHT) keyboard_move = 1;
             if (i < FIRE) {
                 if (FLOAT(actions[i].address) < 1) FLOAT(actions[i].address) = 1;
             } else
                 WORD(actions[i].address) = 1;
         }
-    }
-    /* Controller/script axes are sampled before adding the PC bindings. A
-     * simultaneous stick keeps its original acceleration. Retain keyboard
-     * ownership briefly after release so Responsive also shortens braking. */
-    if (controller_move)
-        InterlockedExchange(&keyboard_move_player, 0);
-    else if (keyboard_move) {
-        InterlockedExchange(&keyboard_move_until, (LONG)(GetTickCount() + 200));
-        InterlockedExchange(&keyboard_move_player, (LONG)WORD(players + 4));
     }
     int dx = 0, dy = 0;
     xbox_FramebufferMouseDelta(&dx, &dy);
@@ -1533,32 +1507,4 @@ void pc_controls_input_end(void)
      * after release; preserve a simultaneously held controller button. */
     for (int i = FIRE; i < PAUSE; ++i) WORD(actions[i].address) = saved_buttons[i - FIRE];
     injected = 0;
-}
-
-void pc_controls_update_movement(uint32_t player, uint32_t action)
-{
-    if (!enabled || !InterlockedCompareExchange(&responsive_movement, 0, 0)) return;
-    uint32_t owner = (uint32_t)InterlockedCompareExchange(&keyboard_move_player, 0, 0);
-    if (!owner) return;
-    if ((LONG)(GetTickCount() - (DWORD)InterlockedCompareExchange(&keyboard_move_until, 0, 0)) >= 0) {
-        InterlockedCompareExchange(&keyboard_move_player, 0, (LONG)owner);
-        return;
-    }
-    if (!guest_range(player, 0x2BE8) || !guest_range(owner, 0x2BE8) || !guest_range(action, 12) ||
-        WORD(player) != PLAYER_VTABLE || WORD(owner) != PLAYER_VTABLE) return;
-    uint32_t flags = WORD(player + 0x10);
-    /* Prediction copies of this local entity have the same persistent ID.
-     * Remote players and unrelated entities retain the original rates. */
-    if (player != owner && (!(flags & 0x20000u) || WORD(player + 0x1C) != WORD(owner + 0x1C))) return;
-    /* Standing/crouching on a supporting entity only. The state can remain
-     * standing for half a second after takeoff; +0x138 is the ground reference
-     * that AliveActions uses to reset its fall timer. Keep the jump-action
-     * check too, before that reference clears on the first airborne step. */
-    if (!(flags & 8) || !WORD(player + 0x138) || WORD(player + 0x3D0) > 1 || WORD(player + PLAYER_CAMERA) ||
-        WORD(player + 0x1074) || FLOAT(action + 4) != 0.0f) return;
-    /* AliveActions has just restored the original rates (100 / 60). Raise
-     * acceleration and braking enough to reach the same target speed within
-     * one 50 ms simulation step; do not alter velocity or maximum speed. */
-    if (FLOAT(player + 0x1A4) > 0 && FLOAT(player + 0x1A4) < 1000) FLOAT(player + 0x1A4) = 1000;
-    if (FLOAT(player + 0x1A8) > 0 && FLOAT(player + 0x1A8) < 1000) FLOAT(player + 0x1A8) = 1000;
 }
