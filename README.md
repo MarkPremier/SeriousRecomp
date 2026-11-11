@@ -186,10 +186,12 @@ If the game crashes or freezes, the details are in `serious_sam_log.txt`
 beside the program (the run before is kept as `serious_sam_log.prev.txt`).
 Please include it with any report.
 
-Known issues in this beta: only the first two levels have been played
-through; a rare freeze during the boot movies; one crash once seen after
-firing in Hatshepsut (not reproduced since); one native stack overflow when
-loading Sand Canyon (not reproduced; the log now records where it happens).
+Validation covers the early levels and selected later-level saves; a full-game
+validation pass is still pending. Known issues include a rare freeze during
+the boot movies and an NVIDIA driver crash seen while compiling shaders with
+an empty cache. Older firing and level-loading crashes have also been reported;
+the specific captured combat freeze is fixed, but other cases are not all
+confirmed resolved. Please keep reporting any recurrence with the session log.
 
 ## What you need
 
