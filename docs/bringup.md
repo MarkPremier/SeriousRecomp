@@ -2087,3 +2087,68 @@ Tests used private portable game data, UDATA/TDATA, sparse partition images,
 settings and a copy of the warm shader cache. All owned test games were
 closed. User saves and settings were not changed; the verified save backup
 above is retained. No runtime or Turok files were changed by this feature.
+
+## Combat freeze in the CRT remainder completion loop
+
+The user reported a freeze while shooting enemies with the laser machine
+gun. The live Release process was still running and its window thread was
+responsive. Three main-thread stack samples all reached host `fmod` through
+Xbox CRT helper `0x2B6724`; the caller chain continued through the render
+path. This was a CPU loop, not a recorded crash or a GPU wait.
+
+Read-only inspection of the main thread's Windows TLS captured
+`g_fp_cmp=2`, `g_fp_cc=0x0400`, `g_fp_top=6`, ST(0)=0 and ST(1)=360.
+The remainder had already reached zero, but the generated `FPREM` neither
+cleared its completion bit C2 nor changed the stale comparison result.
+`FNSTSW AX; SAHF; JP` then tested `g_fp_cmp==2` rather than AH's actual parity
+bit and re-entered the loop indefinitely. The old heap-reservation warnings
+in the log were already known save-stream behaviour and were not evidence
+for the cause of this freeze. The user's INI had no Responsive movement
+override, so movement was still Original.
+
+Runtime commit `9821b58` clears C2 after its complete host `fmod`/`remainder`
+calculation, and makes SAHF snapshot AH's flags into `g_eflags`, preserving
+unaffected bits and tracked overflow. Following branches read that saved
+state, including when AH changes afterward or the last comparison was
+unordered. The quotient condition bits remain outside this completion fix.
+The old FPU-branch fixture also needed an instruction address for its newer
+translator interface. No engine source was copied or adapted.
+
+The complete private regeneration translated 35,114 routines with zero
+failures and nine unresolved stubs. Only CRT chunks 56 and 57 were installed:
+they contain the remainder completion/status changes and other SAHF users.
+The only other generation difference was the existing alive-action wrapper's
+comment spelling; its code was unchanged. The runtime patch relative to
+`f5f395f` now includes `9821b58`; reverse-application checks against the
+current committed runtime pass, without including the pre-existing
+`xbox_memory_layout.c` working-tree modification.
+
+Validation:
+
+- The real generated `0x2B6724` regression timed out before the fix. After
+  regeneration, all 208 cases finish with correct values, stack, FPU stack,
+  callee-saved registers and control word. Cases include the live 0/360 state,
+  stale unordered/C2 values, both signs, large ratios, tiny values, signed
+  zero, NaNs and invalid inputs. All twelve title CTests pass.
+- Thirty-three focused translator tests ran, with one compiler-dependent
+  skip. New tests cover both remainder instructions and all 256 AH patterns
+  for SAHF's unsigned, parity, zero and sign branches. The legacy FPU checks
+  also pass, with their compiled helper skipped because its compiler was
+  unavailable; the MSVC title regression above executes the actual loop.
+- The rebuilt normal executable completed a 125-second private launch into
+  the user's copied Dunes save, including firing and weapon switching, with
+  continuing presentation around 120 fps and no observed freeze. This does
+  not reconstruct the exact laser/enemy encounter; the captured-state
+  regression directly exercises the loop that trapped the user's process.
+
+Evidence is under `analysis/freeze_20261112`: thread samples, live TLS values,
+logs, old CRT chunks and executable, a SHA-256-verified ten-file UDATA/TDATA
+snapshot, and the private `normal_fixed` game/captures/log. Private tests use
+their own saves, partition images, INI and warm shader-cache copy. The user
+closed the frozen game after diagnostics were captured. No test process is
+left running, and the user's saves/settings remain unchanged.
+
+The installed Release executable SHA-256 is
+`FAE38EA4874B7F783E2850B25A00B112C8E999CE91834174B83021C3553EDA51`.
+The source and runtime changes are committed locally; no release was
+published and no runtime branch was pushed. Turok files were untouched.

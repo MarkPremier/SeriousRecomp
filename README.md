@@ -10,6 +10,15 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- A combat freeze while firing the laser was traced in the live game to the
+  CRT remainder loop retaining an old floating-point completion flag. The
+  translator now clears that flag after completing a remainder and makes
+  SAHF read the actual saved status byte. A regression using the original
+  generated routine reproduces the hang before the fix and passes 208
+  numeric/status cases afterward, including the captured frozen state.
+  All twelve title tests pass; a private Dunes run continued through firing
+  and weapon switching without reproducing the freeze.
+
 - Model texture correction (2026-11-10): DSP effects-buffer writes could be
   redirected into character textures when ordinary and contiguous RAM shared
   an address number. DSP scratch/FIFO pages now retain their original memory
@@ -231,7 +240,8 @@ generated C under `analysis/` before regeneration. Analysis, game data and gener
 C are ignored by Git. The Turok runtime is never used as a shared output directory.
 
 The runtime fixes above are local `serious-sam` commits `af664e0` (audio),
-`fd2954b` (shader caches) and `bee76c6` (DSP memory ownership). For an earlier runtime at `f5f395f`, the same changes
+`fd2954b` (shader caches), `bee76c6` (DSP memory ownership) and `9821b58`
+(remainder completion and SAHF flags). For an earlier runtime at `f5f395f`, the same changes
 are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
 before building if those fixes are absent:
 

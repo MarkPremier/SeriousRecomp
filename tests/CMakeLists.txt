@@ -38,6 +38,14 @@ add_executable(lightmap_mask_test lightmap_mask_test.c)
 target_include_directories(lightmap_mask_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINARY_DIR}")
 add_test(NAME lightmap_mask COMMAND lightmap_mask_test)
 
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/extract_fprem.py"
+    "${SAM_GEN}/recomp_0056.c" "${CMAKE_CURRENT_BINARY_DIR}/sam_fprem.inc"
+    COMMAND_ERROR_IS_FATAL ANY)
+add_executable(fprem_test fprem_test.c)
+target_include_directories(fprem_test PRIVATE "${SAM_GEN}" "${CMAKE_CURRENT_BINARY_DIR}")
+add_test(NAME fprem COMMAND fprem_test)
+set_tests_properties(fprem PROPERTIES TIMEOUT 2)
+
 # Exercise the real runtime with synthetic PCM and D3D11 WARP, without saves
 # or game data. Build the Release runtime first for its resampler library.
 set(SAM_RUNTIME_BUILD_DIR "${CMAKE_CURRENT_LIST_DIR}/../build/xboxrecomp" CACHE PATH "Built runtime libraries")
