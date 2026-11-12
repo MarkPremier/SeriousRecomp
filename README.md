@@ -192,6 +192,10 @@ the boot movies and an NVIDIA driver crash seen while compiling shaders with
 an empty cache. Older firing and level-loading crashes have also been reported;
 the specific captured combat freeze is fixed, but other cases are not all
 confirmed resolved. Please keep reporting any recurrence with the session log.
+Walker shadows can appear faint or disappear as the view changes; whether
+this differs from the original Xbox game remains unconfirmed. F11 captures
+now include each simple-shadow corner, projection and intensity to help
+compare the affected views. Shadow rendering has not been changed for this report.
 
 ## What you need
 
@@ -245,7 +249,8 @@ C are ignored by Git. The Turok runtime is never used as a shared output directo
 The runtime fixes above are local `serious-sam` commits `af664e0` (audio),
 `fd2954b` (shader caches), `bee76c6` (DSP memory ownership) and `9821b58`
 (remainder completion and SAHF flags), with the subsequent math-safety
-fixes through `0263c30`. For an earlier runtime at `f5f395f`, the same changes
+fixes through `0263c30` and F11 shadow diagnostics `0a3d6c6`. For an earlier
+runtime at `f5f395f`, the same changes
 are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
 before building if those fixes are absent:
 

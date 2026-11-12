@@ -2259,3 +2259,44 @@ UDATA/TDATA, sparse partition images, settings and warm shader cache were
 private. All ten original save files and the user's INI still match their
 pre-test snapshot. The owned test process was closed. Changes are committed
 locally; nothing was published, and Turok sources were untouched.
+## 2026-11-12: walker shadow investigation (unconfirmed)
+
+The user reports that large biomechanical walkers' shadows disappear as the
+view changes, sometimes approaching and sometimes receding. Backing away
+can restore them; preplaced walkers can lack visible shadows while newly
+spawned walkers initially show them. This is not established as a recomp
+regression or confirmed original-hardware behaviour.
+
+The user's first three F11 captures contain a batched multiplicative
+simple-shadow draw (`ZERO / ONE_MINUS_SRC_COLOR`, texture `80D50000`, 32x32).
+The old capture only recorded its first vertex, insufficient to identify
+individual shadows. Runtime `0a3d6c6` adds all shadow corners, projected
+positions, vertex colours, the fixed transform and depth range to requested
+F11 captures only. It does not change submission, shading, clipping or depth
+testing. No engine reference code was copied or adapted.
+
+Two further user captures from the diagnostic Release contain 7 and 5 shadow
+quads respectively, with vertex RGB strengths from 26/255 (about 10%) to
+full strength. In the close view, the quad under the foreground walker has
+positive clip W at every corner and nonzero intensity. Its receiver plane
+is slightly above the floor plane sampled from scene geometry. This does
+not support the initial whole-quad near-plane rejection hypothesis, and
+does not establish that every shadow is rendered correctly.
+
+Original XBE disassembly (`0x222D0C..0x222D2F`) applies `0.9 * intensity +
+0.1` in the simple-shadow branch. The lighting/shading eligibility and model
+render flags gate submission earlier in that routine. The public Serious
+Engine source was consulted as a naming/behaviour reference, not used as an
+implementation. A matched Xbox/xemu scene remains needed to separate
+original lighting/visibility behaviour from a renderer discrepancy. No
+forced shadow-strength or visibility change has been made.
+
+The diagnostic Release built successfully, SHA-256
+`4041F9D1E85C52999F31DCB30C3DCD6DDBC5F3CDE17F213210304122A8A92943`.
+All 13 title CTests pass; the user-generated F11 captures confirm the new
+per-quad diagnostics execute in normal gameplay. Evidence and private-save
+test material are in `analysis/walker_shadows_20261112`. Test launches used
+copied UDATA/TDATA, sparse partition images, private settings and caches;
+the owned test process has ended. No rendering fix or original-hardware
+verification is claimed. The pre-existing runtime memory-layout change is
+untouched, and no runtime branch or release was published.
