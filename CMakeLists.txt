@@ -63,6 +63,7 @@ set(GAME_SOURCES
     src/game_files.c
     src/pc_controls.c
     src/pc_settings.c
+    src/pc_cheats.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c

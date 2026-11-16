@@ -7,6 +7,19 @@
 #include <math.h>
 #include <xbox/xboxrecomp.h>
 #include "pc_controls.h"
+#include "pc_cheats.h"
+
+extern void sub_0007CF20_gen(void);
+extern void sub_0004C580_gen(void);
+extern void sub_000779D0_gen(void);
+extern void sub_001E6F00_gen(void);
+extern void sub_0007D770_gen(void);
+extern void sub_000CA160(void);
+void sub_0007CF20(void) { pc_cheats_player(sub_0007CF20_gen, sub_000CA160); }
+void sub_0004C580(void) { pc_cheats_damage(sub_0004C580_gen); }
+void sub_000779D0(void) { pc_cheats_receive_damage(sub_000779D0_gen); }
+void sub_001E6F00(void) { pc_cheats_timer(sub_001E6F00_gen); }
+void sub_0007D770(void) { pc_cheats_native_tick(sub_0007D770_gen); }
 
 extern RECOMP_TLS uint32_t g_esp;
 extern ptrdiff_t g_xbox_mem_offset;

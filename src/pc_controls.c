@@ -9,6 +9,7 @@
 #include <math.h>
 #include "pc_controls.h"
 #include "pc_settings.h"
+#include "pc_cheats.h"
 #include <xbox/xboxrecomp.h>
 
 extern ptrdiff_t g_xbox_mem_offset;
@@ -64,6 +65,9 @@ extern void xbox_FramebufferSetMenuPointer(int on);
 #define QUIT_KEY      0x00030CFCu
 #define QUIT_YES      0x00030CFDu
 #define QUIT_NO       0x00030CFEu
+/* Unused NOP padding after the original player action routine. */
+#define OPEN_CHEATS   0x0007D04Eu
+#define CHEATS_KEY    0x0007D04Fu
 #define MAIN_MENU     0x0046F2A0u
 #define PAUSE_MENU    0x0046E5B0u
 #define VISIBLE_ROWS  9
@@ -203,6 +207,9 @@ static uint32_t settings_back;
 #define SETTINGS_BACK PC_SETTINGS_ROWS
 static uint32_t quit_entry, quit_page, quit_choices[2];
 static int quit_selected;
+static void build_cheats(void), cheats_entries_frame(void), cheats_frame(void), open_cheats(void), cheats_key(void);
+static uint32_t cheats_page, cheats_entry, pause_cheats_entry;
+static int cheats_in_frontend = 1;
 static void build_quit(void), quit_frame(void), open_quit(void), quit_key(void);
 static void quit_yes(void), quit_no(void);
 static void quit_desktop(void);
@@ -352,6 +359,7 @@ void pc_controls_load(void)
     if (speed < 1 || speed > 10) speed = 5;
     invert_y = GetPrivateProfileIntA("pc_controls", "invert_y", 0, ini) == 1;
     pc_settings_load(ini);
+    pc_cheats_load(ini);
     fprintf(stderr, "[PC CONTROLS] keyboard/mouse %s; settings %s\n", enabled ? "enabled" : "disabled", ini);
 }
 
@@ -543,6 +551,7 @@ void pc_controls_build_menu(void)
     update_page();
     apply();
     build_quit();
+    build_cheats();
     fprintf(stderr, "[PC CONTROLS] Options entry %08X, page %08X\n", entry, page);
 }
 
@@ -701,6 +710,8 @@ void (*pc_controls_dispatch(uint32_t address))(void)
     if (address == QUIT_KEY) return quit_key;
     if (address == QUIT_YES) return quit_yes;
     if (address == QUIT_NO) return quit_no;
+    if (address == OPEN_CHEATS) return open_cheats;
+    if (address == CHEATS_KEY) return cheats_key;
     return NULL;
 }
 
@@ -1105,7 +1116,7 @@ static void native_mouse_frame(void)
     uint32_t menu = shown_menu(), buttons[MAX_MENU_GADGETS], focused, hit;
     uint32_t shortcuts[MAX_MENU_GADGETS];
     int x, y, w, h, n;
-    if (!menu || menu == page || menu == settings_page || menu == quit_page || capturing >= 0) return;
+    if (!menu || menu == page || menu == settings_page || menu == quit_page || menu == cheats_page || capturing >= 0) return;
     int click = xbox_FramebufferMouseClicks(0), right = xbox_FramebufferMouseClicks(1);
     int wheel = xbox_KbmMenuWheel();
     if (!xbox_FramebufferPointer(&x, &y, &w, &h)) {
@@ -1163,14 +1174,20 @@ void pc_controls_frame(void)
     if (GetCurrentThreadId() != main_thread) return;
     if (!enabled || shown_menu() != hovered_shortcut_menu) hovered_shortcut = hovered_shortcut_menu = 0;
     wide_frame();
+    cheats_entries_frame();
     if (quit_entry) WORD(quit_entry + GADGET_VISIBLE) = shown_menu() == MAIN_MENU;
     if (quit_entry && shown_menu() == MAIN_MENU) {
-        WORD(MAIN_MENU_LAST + GADGET_DOWN) = quit_entry;
+        WORD(MAIN_MENU_LAST + GADGET_DOWN) = cheats_entry ? cheats_entry : quit_entry;
         WORD(TEMPLATE_BUTTON + GADGET_UP) = quit_entry;
     }
     follow_mode();
     keyboard_frame();
     pc_settings_poll();
+    if (cheats_page && shown_menu() == cheats_page) {
+        if (capturing >= 0) cancel_capture();
+        cheats_frame();
+        return;
+    }
     if (quit_page && shown_menu() == quit_page) {
         quit_frame();
         return;
@@ -1281,6 +1298,7 @@ static void build_quit(void)
     WORD(quit_entry + GADGET_TRIGGER) = OPEN_QUIT;
     WORD(quit_entry + GADGET_UP) = MAIN_MENU_LAST;
     WORD(quit_entry + GADGET_DOWN) = TEMPLATE_BUTTON;
+    slide_in(quit_entry, 5);
     quit_selected = 1;
     update_quit();
 }
@@ -1443,6 +1461,7 @@ static void settings_frame(void)
 
 int pc_controls_input_begin(uint32_t profile)
 {
+    if (GetCurrentThreadId() == main_thread) { cheats_in_frontend = 0; pc_cheats_frontend(0); }
     injected = 0;
     InterlockedExchange(&action_ms, (LONG)GetTickCount());
     InterlockedExchange(&action_seen, 1);
@@ -1508,3 +1527,5 @@ void pc_controls_input_end(void)
     for (int i = FIRE; i < PAUSE; ++i) WORD(actions[i].address) = saved_buttons[i - FIRE];
     injected = 0;
 }
+
+#include "pc_cheats_menu.inc"

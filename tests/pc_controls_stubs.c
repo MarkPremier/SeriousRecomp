@@ -26,6 +26,17 @@ void sub_00070810_gen(void) {}
 void sub_0002B6BE_gen(void) {++pc_menu_draw_calls;g_esp+=4;}
 float pc_controls_view_wide(void) {return 1.0f;}
 void sub_001D1C00_gen(void) {}
+void pc_cheats_player(void (*original)(void), void (*grant)(void)) {(void)grant;original();}
+void pc_cheats_damage(void (*original)(void)) {original();}
+void pc_cheats_receive_damage(void (*original)(void)) {original();}
+void pc_cheats_timer(void (*original)(void)) {original();}
+void pc_cheats_native_tick(void (*original)(void)) {original();}
+void sub_0007CF20_gen(void) {}
+void sub_0004C580_gen(void) {}
+void sub_000779D0_gen(void) {}
+void sub_001E6F00_gen(void) {}
+void sub_0007D770_gen(void) {}
+void sub_000CA160(void) {}
 
 /* Idle-handler handoff, separate from the real VP regression fixture. */
 typedef struct MCPXAPUState MCPXAPUState;

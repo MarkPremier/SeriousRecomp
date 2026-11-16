@@ -14,7 +14,29 @@ project is the reference for how the pipeline works and for the kinds of bugs to
 It is in active use by another agent, so **read it, but never modify it** (see
 "Do not touch").
 
-## Current state (2026-11-04)
+## Current state
+
+- **Cheats (2026-11-16):** main-menu Cheats plus a remembered, default-off
+  "Show in pause menu" switch. `src/pc_cheats.c` owns the choices and
+  single-player-only effects; `src/pc_cheats_menu.inc` shares the native PC
+  menu helpers. Manual wrappers cover alive action `7CF20`, damage factor
+  `4C580`, player damage `779D0`, native cheat update `7D770`, and weapon
+  relative timers `1E6F00`. Keep their `_gen` extern declarations in
+  `recomp_manual.c` for regeneration. Callback tokens `7D04E/F` are verified
+  NOP padding; `30CF5/6` are real instructions and must not be used.
+  Cheats/quit entry animation needs `sub_0001AFBA` after final positioning,
+  on creation and on each return to Main. Cheats continues the original
+  five-row alternation from the right, Quit Game from the left. Do not
+  rewrite animation endpoints every frame. Fourteen CTests pass, including
+  extracted original damage/GiveAll helpers and menu animation checks.
+  The normal executable was rebuilt and launched with private files, but
+  Computer Use's app-access check rejected live window inspection despite
+  explicit user approval. Live gameplay/visual verification remains pending;
+  do not equate presentation/FPS log progress with that verification.
+  Evidence and the old exe/map are in `analysis/cheats_20261116`. All eleven
+  snapshotted user save/settings files match. See README and the latest
+  `docs/bringup.md` section for current details; the older entries below
+  describe historical checkpoints.
 
 - **The main menu has no music on original hardware** (confirmed by the user,
   2026-11-04). Silence there is correct; do not chase it. Menu static before

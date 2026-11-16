@@ -2300,3 +2300,60 @@ copied UDATA/TDATA, sparse partition images, private settings and caches;
 the owned test process has ended. No rendering fix or original-hardware
 verification is claimed. The pre-existing runtime memory-layout change is
 untouched, and no runtime branch or release was published.
+
+## 2026-11-16: main-menu cheats and optional pause entry
+
+Issue #3 requests single-player cheats. The user requested a main-menu Cheats
+page with an option to expose it in the pause menu. `pc_cheats.c` owns the
+remembered choices and title-specific gameplay hooks; `pc_cheats_menu.inc`
+uses the existing native menu construction, keyboard/controller and pointer
+paths. All effects default off. Pause visibility is independent, defaults off,
+and is restricted to a single-player session.
+
+The USA XBE registers `cht_bFly`, `cht_fTranslationMultiplier`,
+`gam_bInfiniteAmmo` and `sam_bUnlockAllLevels`. The new code uses the original
+GiveAll routine `0xCA160`, powerup damage helper `0x4C580`, player damage
+receiver `0x779D0`, alive action `0x7CF20`, cheat update `0x7D770`, and relative
+entity timer `0x1E6F00`. Manual wrappers preserve full regeneration through
+the existing `--exclude-manual` pipeline. No engine reference implementation
+was copied or adapted, and no runtime source was edited.
+
+The network object's session properties are at +0x9CC; the +8 single-player
+flag gates effects independently of cooperative mode or local-player count.
+Player pointers, ownership and the player vtable are checked. Speed/jump,
+native flight and ammo flags are scoped around their original calls; health
+does not revive a dead player. Double jump accepts one additional press while
+airborne and resets on landing. Firing speed scales only timers belonging to
+the player's weapon entity. The sniper's two post-shot timers retain a 50 ms
+transition instead of the original bolt/recovery delay. The unlock option
+temporarily overrides the level selector in the front end and grants inventory
+through the original GiveAll when play starts. Granted inventory can persist in
+an ordinary game save and is not revoked by turning the option off.
+
+The user spotted that Cheats and Quit Game appeared immediately instead of
+sliding in. Their custom text buttons had resting positions without the native
+horizontal endpoints. Creation and each return to the main menu now apply
+the original `0x1AFBA` setter: Cheats enters from the right and Quit Game from
+the left, continuing the original alternating five-row pattern. Endpoints
+are not rewritten every frame. The optional pause entry receives a matching
+alternating endpoint on entry too.
+
+Fourteen CTests pass, including menu scrolling, mouse aspect mapping,
+controller keys, optional pause visibility, replayed side-entry endpoints,
+guest stack/FPU balance, original defaults, multiplayer/thread isolation,
+invalid objects, dead/cinematic players, multipliers, ammo, double-jump
+edges, timer restoration and INI persistence. The cheat fixture also extracts
+the actual generated damage/GiveAll routines from the local disc generation.
+Live window/gameplay verification remains pending. Computer Use attempts
+were denied by its automatic app-access check despite the user's explicit
+authorization and subsequent full-access instruction. A private
+normal-discovery launch and the old executable/map
+are retained in `analysis/cheats_20261116`. Tests use copied saves, settings,
+partition images and a private warm shader cache.
+
+The rebuilt Release is installed at `build/Release/serious_sam_recomp.exe`.
+The private normal launch continued presenting near its selected 120 fps cap;
+this is log evidence of progression, not visual or gameplay verification.
+All eleven snapshotted user save/profile/settings files still match their
+pre-test SHA-256 hashes. The runtime's pre-existing memory-layout modification
+and all Turok worktrees remain untouched. No release or remote changes were made.

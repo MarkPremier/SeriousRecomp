@@ -88,6 +88,56 @@ void pc_settings_poll(void){}
 static void clear_axes(void){memset(PTR(0x480468),0,12*4);}
 static void close_enough(float value,float expected){CHECK(fabsf(value-expected)<0.00001f);}
 
+static void cheats_menu_test(void)
+{
+    cheats_page=0x690000;cheat_back=0x691000;cheat_help=0x691200;
+    cheats_entry=0x691400;pause_cheats_entry=0x691600;quit_entry=0x691800;
+    WORD(cheat_help+GADGET_TEXT)=cheat_help+BUTTON_SIZE;
+    for(int i=0;i<CHEAT_ROWS;++i) {
+        cheat_rows[i]=0x692000+i*0x400;cheat_values[i]=cheat_rows[i]+0x200;
+        WORD(cheat_values[i]+GADGET_TEXT)=cheat_values[i]+BUTTON_SIZE;
+    }
+    cheat_selected=cheat_scroll=0;update_cheats();
+    CHECK(WORD(cheat_rows[0]+GADGET_VISIBLE) && !WORD(cheat_rows[CHEATS_VISIBLE]+GADGET_VISIBLE));
+    for(int i=0;i<CHEAT_ROWS;++i) {
+        g_esp=0x30000;WORD(g_esp+4)=VK_DOWN;pc_controls_dispatch(CHEATS_KEY)();CHECK(g_esp==0x3000C);
+    }
+    CHECK(cheat_selected==CHEAT_ROWS && WORD(cheat_back+GADGET_FOCUSED));
+    CHECK(cheat_scroll==CHEAT_ROWS-CHEATS_VISIBLE);
+    int before=backs;g_esp=0x30000;WORD(g_esp+4)=0x64;pc_controls_dispatch(CHEATS_KEY)();CHECK(backs==before+1);
+    cheat_selected=CHEAT_PAUSE_MENU;g_esp=0x30000;WORD(g_esp+4)=0x64;pc_controls_dispatch(CHEATS_KEY)();CHECK(pc_cheats_pause_menu());
+    /* Mouse mapping remains 4:3 when the window is ultrawide. */
+    WORD(ACTIVE_MENU)=cheats_page;pc_controls_menu_drawn();cheat_selected=cheat_scroll=0;update_cheats();
+    pw=1600;ph=900;px=400;py=339;pointer_on=1;clicks[0]=1;cheats_frame();CHECK(cheat_selected==CHEAT_HEALTH);
+    char value[32];pc_cheats_value(CHEAT_HEALTH,value,sizeof value);CHECK(!strcmp(value,"On"));
+    clicks[1]=1;cheats_frame();pc_cheats_value(CHEAT_HEALTH,value,sizeof value);CHECK(!strcmp(value,"Off"));
+    for(int i=0;i<10;++i){wheel=-1;cheats_frame();}CHECK(cheat_scroll>0);
+    pointer_on=0;
+    /* Main menu always exposes Cheats; pause is optional and SP-only. */
+    WORD(ACTIVE_MENU)=MAIN_MENU;pc_controls_menu_drawn();cheats_entries_frame();CHECK(WORD(cheats_entry+GADGET_VISIBLE));
+    close_enough(FLOAT(cheats_entry+GADGET_TARGET_X),391+640);
+    close_enough(FLOAT(quit_entry+GADGET_TARGET_X),391-640);
+    CHECK(WORD(cheats_entry+GADGET_TRANSITION)==3 && WORD(quit_entry+GADGET_TRANSITION)==2);
+    close_enough(FLOAT(cheats_entry+GADGET_TARGET_Y),339);close_enough(FLOAT(quit_entry+GADGET_TARGET_Y),373);
+    CHECK(g_fp_top==0);
+    FLOAT(cheats_entry+GADGET_TARGET_X)=42;cheats_entries_frame();CHECK(FLOAT(cheats_entry+GADGET_TARGET_X)==42);
+    WORD(ACTIVE_MENU)=cheats_page;cheats_entries_frame();WORD(ACTIVE_MENU)=MAIN_MENU;cheats_entries_frame();
+    close_enough(FLOAT(cheats_entry+GADGET_TARGET_X),391+640); /* replay on Back */
+    const uint32_t first=0x69A000,last=0x69A200;
+    WORD(PAUSE_MENU+SCREEN_GADGETS)=first+GADGET_NODE;
+    WORD(first+GADGET_NODE)=last+GADGET_NODE;WORD(last+GADGET_NODE)=0x69AF00;WORD(0x69AF00)=0;
+    WORD(first+GADGET_FOCUSED)=1;WORD(first+GADGET_VISIBLE)=WORD(last+GADGET_VISIBLE)=1;
+    WORD(first+GADGET_DOWN)=last;WORD(first+GADGET_UP)=last;WORD(last+GADGET_DOWN)=first;WORD(last+GADGET_UP)=first;
+    FLOAT(first+GADGET_Y)=200;FLOAT(last+GADGET_Y)=300;FLOAT(last+GADGET_SCALE)=0.7f;
+    WORD(NETWORK)=0x700000;WORD(0x700000+0x9CC+8)=1;
+    WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();cheats_entries_frame();
+    CHECK(WORD(pause_cheats_entry+GADGET_VISIBLE) && WORD(last+GADGET_DOWN)==pause_cheats_entry);
+    CHECK(!WORD(cheats_entry+GADGET_VISIBLE));
+    pc_cheats_step(CHEAT_PAUSE_MENU,1);cheats_entries_frame();CHECK(!WORD(pause_cheats_entry+GADGET_VISIBLE) && WORD(last+GADGET_DOWN)==first);
+    pc_cheats_step(CHEAT_PAUSE_MENU,1);WORD(0x700000+0x9CC+8)=0;cheats_entries_frame();CHECK(!WORD(pause_cheats_entry+GADGET_VISIBLE));
+    pc_cheats_step(CHEAT_RESET,1);
+}
+
 static void options_animation_test(void)
 {
     static const uint32_t original[]={0x472768,0x472830,0x4728F8,0x4729E8,0x472AB0,0x472BA0};
@@ -384,6 +434,7 @@ int main(void)
     }
     menu_draw_seen=0;WORD(ACTIVE_MENU)=0;
     native_mouse_test();
+    cheats_menu_test();
     DeleteFileA(path);free((void *)g_xbox_mem_offset);
     puts("PC actions, release, profile isolation, raw mouse, settings and page input passed");return 0;
 }

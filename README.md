@@ -10,6 +10,13 @@ your own disc image, and the C code is generated from it on your machine.
 
 ## Status
 
+- A new **Cheats** page is available directly from the main menu. Its
+  **Show in pause menu** switch adds the same page to the single-player
+  pause menu. Cheats default to off and choices are remembered separately
+  from the console profile. Cheats and Quit Game use the original alternating
+  side-entry animation. Fourteen automated regressions pass; live gameplay
+  verification of the new effects remains pending.
+
 - A further math-safety review corrected stale trig completion status and
   out-of-range stack behavior, unsafe scale-exponent conversions and
   unmasked logical-shift counts. Thirteen title tests pass, including
@@ -432,6 +439,27 @@ and its pause menu use the chosen aspect.
 Explicit `RECOMP_RENDER_SCALE`, `RECOMP_VSYNC` and `RECOMP_FPS_CAP` overrides win
 at launch and appear on the page. `RECOMP_PC_SETTINGS_FILE` selects a private
 graphics INI for tests; otherwise the controls INI path is shared.
+
+## Cheats
+
+Open **Cheats** on the main menu. **Show in pause menu** (off by default)
+adds a Cheats entry while single-player is paused. Arrows or the D-pad select
+a row; Left/Right, Enter/A, or a mouse click changes it. The wheel scrolls
+the page and Escape/B returns. Choices are stored under `[cheats]` in
+`serious_sam_settings.ini`, alongside the PC controls and graphics settings.
+
+Available choices are unlimited health (200), armor (200) and ammo; movement
+speed, damage and firing-speed multipliers (1x, 1.5x, 2x, 3x, 5x); super jump;
+double jump; flying; all weapons and levels; and skipping the sniper's
+post-shot reload delay. **Disable all cheats** restores normal gameplay
+choices while keeping the pause-menu visibility preference.
+
+Effects apply only to the local player in a single-player session. Gameplay
+changes default to off. Weapon timing still follows the original simulation;
+firing-speed choices scale weapon timers. Unlocking grants weapons and ammo
+when entering play, so an in-game save made afterward can retain that inventory.
+Turning it off restores the level-selector override; it does not remove weapons
+already granted or undo a save.
 
 ## Reference
 
