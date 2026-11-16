@@ -37,6 +37,8 @@ void sub_000779D0_gen(void) {}
 void sub_001E6F00_gen(void) {}
 void sub_0007D770_gen(void) {}
 void sub_000CA160(void) {}
+void sub_001BC270_gen(void) {}
+void pc_shadows_simple(void (*original)(void)) {original();}
 
 /* Idle-handler handoff, separate from the real VP regression fixture. */
 typedef struct MCPXAPUState MCPXAPUState;

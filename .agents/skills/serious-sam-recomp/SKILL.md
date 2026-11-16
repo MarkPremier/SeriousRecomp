@@ -16,6 +16,22 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state
 
+- **Opt-in walker shadow trial (2026-11-16):** the user requested a test fix
+  after the lighting diagnosis. `tools/test-walker-shadows.cmd` sets
+  `RECOMP_WALKER_SHADOW_MIN=1` (100%, as requested); normal launches retain original shadows.
+  `pc_shadows.c` clamps only the skeletal simple-shadow call's intensity for
+  Biomech vtable `3AD9D8`, caller `223235`, with the matching instance in ECX.
+  Other entities/callers, original inputs above the minimum, fog, projection,
+  texture and GPU depth/blending remain native. This is a visibility trial,
+  not a confirmed Xbox parity correction. Wrapper `1BC270` needs its exact
+  `_gen` extern in `recomp_manual.c` for regeneration. The body in ignored
+  generated chunk 38 is renamed `_gen` accordingly. Fifteen tests pass,
+  including opt-in/invalid values, scope and guest stack/argument preservation.
+  The 100% trial is visually verified in the actual private Suburbs window,
+  with F11 RGB 1 versus 26/255 when disabled. Evidence is under
+  `analysis/walker_shadow_trial_20261116`; installed exe SHA-256 starts
+  `703f657e`. All owned trial processes ended and original saves were unchanged.
+
 - **Walker shadow diagnosis (2026-11-16):** a private Suburbs reproduction
   establishes that the visible walker's quad passes 190,776 / 201,396 raw GPU
   samples. Rejected quads behind buildings must not be confused with it.

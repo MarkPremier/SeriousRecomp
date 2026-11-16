@@ -8,6 +8,10 @@
 #include <xbox/xboxrecomp.h>
 #include "pc_controls.h"
 #include "pc_cheats.h"
+#include "pc_shadows.h"
+
+extern void sub_001BC270_gen(void);
+void sub_001BC270(void) { pc_shadows_simple(sub_001BC270_gen); }
 
 extern void sub_0007CF20_gen(void);
 extern void sub_0004C580_gen(void);

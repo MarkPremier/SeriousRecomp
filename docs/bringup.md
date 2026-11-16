@@ -2463,3 +2463,45 @@ patch. The normal Release exe is byte-identical to its pre-investigation
 copy (SHA-256 `5c73e1fde5ca93ca4c7a9fc68cffbed831619372ba1f029a12d8929e80ea324d`).
 All 11 original save/settings hashes match, and owned shadow-test processes
 have ended. The pre-existing runtime memory-layout change was untouched.
+
+### Opt-in stronger walker shadow trial
+
+At the user's request, `tools/test-walker-shadows.cmd` now launches the normal
+Release executable with `RECOMP_WALKER_SHADOW_MIN=1` (100%, as requested).
+Normal launches have
+the original appearance. `pc_shadows_load` reads the trial value once at
+startup; absent/empty/zero, malformed, nonfinite or out-of-range values leave
+the original path active. Valid minimum values are 0.1 through 1.0.
+
+The title-only `1BC270` wrapper checks the native skeletal shadow caller
+`223235`, the Biomech entity vtable `3AD9D8`, and that ECX is that entity's
+skeletal instance. It raises only input strengths below the chosen minimum
+and at least 0.1. It restores the argument bits after the original call.
+The original routine still controls the receiver plane, texture, fog/haze,
+projection, depth testing and blend. No global engine constant or sunlight
+mask is changed. Native Biomech constructor/setup `97760` and neighbouring
+setup code identify its WalkerSmall/WalkerBig resources. Keep the wrapper's
+exact `_gen` extern for regeneration; generated chunk 38 has the corresponding
+body renamed `_gen` locally.
+
+All 15 title CTests pass. The new test covers default/explicitly disabled and
+invalid settings, weak and stronger shadow inputs, unrelated entity/caller
+and instance rejection, receiver-plane preservation and the guest stack and
+argument bits. The visibility change is experimental; original Xbox parity
+has not been established.
+
+The normal Release executable was launched with private save/settings copies
+in both disabled and enabled modes. The disabled F11 capture retains RGB
+26/255 on the foreground walker shadow. At the user's requested 100%, the
+enabled capture records RGB 1 at all four corners. Actual-window inspection
+confirms clearly visible ground blobs beneath both close walkers in Suburbs.
+The original texture still provides the soft edge. A preliminary 50% trial
+also worked; the delivered launcher now uses 100%. Evidence is under
+`analysis/walker_shadow_trial_20261116/original` and `strong`.
+
+Installed Release SHA-256:
+`703f657e6eace7db699cca73b167d95074f63d0de6221048c50850c239355e64`.
+The previous executable remains under `analysis/shadows_suburbs_20261116`.
+All owned trial processes ended and all 11 original save/settings hashes
+match. Runtime sources, including the pre-existing memory-layout change,
+were untouched by this title-only trial. Nothing was published.

@@ -456,6 +456,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     {
         extern void pc_controls_load(void);
         pc_controls_load();
+        extern void pc_shadows_load(void);
+        pc_shadows_load();
     }
     printf("Loading XBE...\n");
 
