@@ -16,6 +16,24 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state
 
+- **Walker shadow diagnosis (2026-11-16):** a private Suburbs reproduction
+  establishes that the visible walker's quad passes 190,776 / 201,396 raw GPU
+  samples. Rejected quads behind buildings must not be confused with it.
+  Texture red max/mean is 245/68.2334, so 26/255 vertex strength gives about
+  9.8% peak and 2.7% mean darkening. Temporarily raising the native minimum
+  in the private process produces visible blobs; it was restored, not shipped.
+  The skeletal-model path is `222FE0`, with the same `.9 * shade + .1` at
+  `223213..223230` as the older `222A20` path. Near walkers' sunlight samples
+  have four zero mask bits. Sixteen live masked-light samples match direct
+  interpolation; all three captured masks exactly match the original
+  `Levels/FE08_Suburbs.wld` in Main.gro. This locates the faintness upstream
+  of drawing, but position-to-mask parity with Xbox/xemu is still unverified.
+  Evidence: `analysis/shadows_suburbs_20261116`, especially `depth_close.txt`,
+  `strength_full.bmp`, `lighting_memory.json`, `mask_verification.json`.
+  Temporary GPU/generated-code probes were restored; normal exe SHA-256
+  remains `5c73e1fd...`, all 11 original save/settings hashes match, and all
+  owned shadow-test processes ended. No rendering correction is claimed.
+
 - **Saved-game cheat correction (2026-11-16):** the initial cheat gate read
   the wrong property. Single-player is network +0x9CC +0x10, NOT +8. This is
   verified from original initializers `80040`/`800E0` and a copied Suburbs save.

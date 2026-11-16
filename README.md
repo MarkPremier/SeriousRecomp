@@ -202,9 +202,13 @@ an empty cache. Older firing and level-loading crashes have also been reported;
 the specific captured combat freeze is fixed, but other cases are not all
 confirmed resolved. Please keep reporting any recurrence with the session log.
 Walker shadows can appear faint or disappear as the view changes; whether
-this differs from the original Xbox game remains unconfirmed. F11 captures
-now include each simple-shadow corner, projection and intensity to help
-compare the affected views. Shadow rendering has not been changed for this report.
+this differs from the original Xbox game remains unconfirmed. In a copied
+Suburbs save, the visible walker's shadow passes the GPU depth test, but the
+native lighting path supplies only 26/255 strength. Its sunlight-mask samples
+are zero, and the live mask matches the original disc data. The shadow texture
+reduces average darkening further, to roughly 3%. See the bring-up notes for
+the depth, strength and lighting comparisons. Shadow rendering has not been
+changed for this report.
 
 ## What you need
 

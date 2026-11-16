@@ -2404,3 +2404,62 @@ Xbox/xemu parity is still unverified. It cannot yet be classified as original
 level authoring or a recomp defect. Computer Use became available for this
 session, but a physical Escape stopped it during the private saved-game check;
 no further window input was issued afterward.
+
+### Follow-up: separate GPU visibility from native shadow strength
+
+The renewed investigation now has a private reproduction, using copied
+Suburbs saves, settings, sparse partition images and a private shader cache.
+Runtime diagnostic inputs navigate out of the saved indoor position to the
+walkers. No input or memory writes target the user's normal game process.
+
+An isolated D3D11 probe draws the exact previously captured foreground quad
+and fixed transform over a clear depth buffer. Hardware and WARP both shade
+1,559 pixels; disabling culling or depth does not restore additional pixels.
+This checks the transform, winding and multiplicative combiner in isolation.
+
+A temporary, opt-in GPU probe then replays each shadow quad with colour/depth
+writes disabled and counts samples with original depth versus no depth. The
+replays are excluded from the game's ZPASS counter. In `depth_close.txt`, quad
+6 projects to x=321..401, y=279..305 beneath the visible walker. It passes
+190,776 of 201,396 raw samples (about 94.7%). These are scaled/MSAA samples,
+not logical pixels. Quad 5 passes only 13 of 22,442, but projects behind the
+building at x=144..193, y=257..264. That rejection is not evidence that the
+visible walker's shadow is blocked by its floor.
+
+The real 32x32 blob texture decodes successfully: red maximum 245, mean
+68.2334. Combined with vertex RGB 26/255, this gives at most approximately
+9.8% darkening, and a texture-wide mean of about 2.7%. Temporarily changing
+the native minimum from .1 to 1 in the **private process only** produces
+clearly visible ground blobs (`strength_full.bmp`). The value was restored
+immediately. This is a diagnostic comparison, not a rendering fix or a
+proposed default; the shared constant can affect other native calculations.
+
+CPU lighting diagnostics locate the low input in the original engine path.
+These skeletal models use `222FE0`; instructions `223213..223230` apply the
+same `.9 * shade + .1` policy as the previously inspected `222A20` branch.
+The traced sunlight is RGB 140/140/140. Two near walkers sample the 64x171
+baked sunlight mask at (59.830078125,108.0400390625) and
+(47.5693359375,94.4228515625). All four interpolation bits are zero for both,
+so the engine reports no sunlight there and reaches its minimum blob strength.
+
+`lighting_memory.json` preserves private entity/shading-cache and mask data;
+`mask_verification.json` compares 16 live masked-light samples with direct
+bit lookup and bilinear interpolation, with zero mismatches. All three
+captured mask byte arrays are exact matches inside the original disc's
+`Levels/FE08_Suburbs.wld` in Main.gro, at decompressed offsets 171001, 158867
+and 150480. The near walkers use the last mask. This rules out corrupted
+saved mask bytes for this reproduction. It does not independently validate
+the engine's world-position-to-mask coordinates against Xbox/xemu.
+
+The evidence therefore locates the faintness upstream of GPU drawing in
+this scene. A matched original Xbox/xemu view remains needed to establish
+whether those lighting lookups and the resulting appearance match the
+original. No unconditional strength increase, disabled depth test or other
+rendering correction has been installed.
+
+All temporary GPU and generated-code changes were restored after recording
+the evidence. The ignored analysis directory retains the probe source and
+patch. The normal Release exe is byte-identical to its pre-investigation
+copy (SHA-256 `5c73e1fde5ca93ca4c7a9fc68cffbed831619372ba1f029a12d8929e80ea324d`).
+All 11 original save/settings hashes match, and owned shadow-test processes
+have ended. The pre-existing runtime memory-layout change was untouched.
