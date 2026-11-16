@@ -15,7 +15,7 @@ your own disc image, and the C code is generated from it on your machine.
   pause menu. Cheats default to off and choices are remembered separately
   from the console profile. Cheats and Quit Game use the original alternating
   side-entry animation. A wrong session-field check that disabled cheats in
-  real single-player games is corrected. Fourteen regressions pass, including
+  real single-player games is corrected. Fifteen regressions pass, including
   original session initializers; a copied Suburbs save verifies health, armor
   and ammo effects. Broader effect validation remains pending.
 

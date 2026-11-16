@@ -2505,3 +2505,21 @@ The previous executable remains under `analysis/shadows_suburbs_20261116`.
 All owned trial processes ended and all 11 original save/settings hashes
 match. Runtime sources, including the pre-existing memory-layout change,
 were untouched by this title-only trial. Nothing was published.
+
+### Beta v0.1.5 packaging checks
+
+The user requested committing and publishing a release. The package contains
+only the verified Release executable, the same compiler DLL as Beta v0.1.4,
+the README and `tools/test-walker-shadows.cmd`. The launcher now locates an
+executable beside its parent directory in an extracted package, and falls
+back to `build/Release` in a source checkout. No game files, saves, personal
+settings, logs or analysis captures are packaged.
+
+All 15 CTests pass again. The exact ZIP was extracted into a private directory
+and its included CMD launcher was executed against the copied Suburbs save.
+The startup log confirms minimum 1, and the foreground shadow's F11 vertex
+RGB is 1 at every corner. The frame shows its ground blob. Evidence is under
+`analysis/publish_20261116/smoke`. The executable hash remains `703f657e...`.
+The original save/settings hashes are unchanged. Release notes distinguish
+the optional shadow visibility adjustment from unverified Xbox parity and
+retain the unresolved stability and floor-seam issues.
