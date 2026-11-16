@@ -16,6 +16,20 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state
 
+- **Normal-launch walker shadows (2026-11-16):** the user still saw no shadows
+  because Beta v0.1.5's ordinary executable left the override disabled. Its
+  running-game log had no shadow-enable line. `pc_shadows_load` now defaults
+  to 1 (100%) without any environment variable or special launcher. Explicit
+  `RECOMP_WALKER_SHADOW_MIN=0` restores the original strength; invalid overrides
+  also use the original. Startup logs both enabled and original states.
+  Fifteen tests pass, including unset-environment weak/strong inputs becoming
+  full strength. A direct executable launch with the shadow variable absent
+  is verified in the actual private Suburbs window and F11 RGB 1. Evidence:
+  `analysis/walker_default_20261116`; installed SHA-256 starts `1bc05fdb`.
+  The user's game exited itself before installation; no user process was
+  terminated. All 11 snapshotted original files match after the private check.
+  This supersedes the opt-in default described in the older entry below.
+
 - **Opt-in walker shadow trial (2026-11-16):** the user requested a test fix
   after the lighting diagnosis. `tools/test-walker-shadows.cmd` sets
   `RECOMP_WALKER_SHADOW_MIN=1` (100%, as requested); normal launches retain original shadows.

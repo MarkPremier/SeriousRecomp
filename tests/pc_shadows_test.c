@@ -24,7 +24,8 @@ int main(void) {
     g_ecx=model;g_esi=entity;
     WORD(entity)=BIOMECH_VTABLE;WORD(entity+0x7C)=model;
     WORD(stack)=SKELETAL_SHADOW_CALLER;
-    _putenv_s("RECOMP_WALKER_SHADOW_MIN","");pc_shadows_load();run(.101960786f,.101960786f);
+    _putenv_s("RECOMP_WALKER_SHADOW_MIN","");pc_shadows_load();
+    run(.101960786f,1);run(.8f,1);
     _putenv_s("RECOMP_WALKER_SHADOW_MIN","0.5");pc_shadows_load();
     run(.101960786f,.5f);run(.8f,.8f);run(0,0);run(1,1);
     WORD(entity)=0x3ABCD0;run(.101960786f,.101960786f); /* player / other entity */
@@ -37,7 +38,7 @@ int main(void) {
     }
     _putenv_s("RECOMP_WALKER_SHADOW_MIN","1");pc_shadows_load();
     run(.101960786f,1);run(1,1);
-    CHECK(calls==16);
-    puts("Walker shadow trial: opt-in scope, stronger inputs, disabled values and guest ABI passed");
+    CHECK(calls==17);
+    puts("Walker shadows: default full strength, scope, overrides and guest ABI passed");
     free((void *)g_xbox_mem_offset);return 0;
 }

@@ -1,4 +1,4 @@
-/* Optional visibility trial, based on the USA XBE's skeletal-shadow call.
+/* Walker shadow visibility, based on the USA XBE's skeletal-shadow call.
  * Keep the lighting mask, projection, fog and GPU depth/blend paths intact. */
 #include <stdint.h>
 #include <stddef.h>
@@ -19,15 +19,19 @@ static float minimum;
 void pc_shadows_load(void)
 {
     const char *value = getenv("RECOMP_WALKER_SHADOW_MIN");
-    minimum = 0;
+    minimum = 1.0f;
     if (value && *value) {
         char *end;
         float parsed = strtof(value, &end);
+        minimum = 0;
         if (!*end && isfinite(parsed) && parsed >= 0.1f && parsed <= 1.0f)
             minimum = parsed;
     }
     if (minimum > 0.1f)
-        fprintf(stderr, "[PC-SHADOWS] experimental walker minimum %.3g enabled\n", minimum);
+        fprintf(stderr, "[PC-SHADOWS] walker minimum %.3g enabled (%s)\n", minimum,
+                value && *value ? "environment override" : "default");
+    else
+        fprintf(stderr, "[PC-SHADOWS] original walker shadow strength (environment override)\n");
 }
 
 void pc_shadows_simple(void (*original)(void))

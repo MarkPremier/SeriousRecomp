@@ -2523,3 +2523,32 @@ RGB is 1 at every corner. The frame shows its ground blob. Evidence is under
 The original save/settings hashes are unchanged. Release notes distinguish
 the optional shadow visibility adjustment from unverified Xbox parity and
 retain the unresolved stability and floor-seam issues.
+
+### Normal-launch walker shadow correction
+
+After Beta v0.1.5 was published, the user reported the walker still had no
+visible shadow. Their running executable was the published `703f657e...`
+build at the normal Release path. Its current startup log had no enabled
+shadow override: the ordinary launch still used the original strength.
+Leaving the requested 100% change behind a separate CMD launcher caused this
+failure in normal use.
+
+`pc_shadows_load` now defaults to full strength when the environment variable
+is absent. Explicit zero or invalid overrides retain the original strength,
+and startup logging identifies both states. Scope, receiver geometry, fog,
+texture and GPU depth/blend behavior are unchanged. All 15 title tests pass;
+the shadow fixture now checks the actual default rather than treating a
+missing variable as disabled.
+
+A direct launch of the candidate executable, with
+`RECOMP_WALKER_SHADOW_MIN` absent and no CMD launcher, loaded the copied
+Suburbs save. The log reports minimum 1 enabled (default), the foreground
+quad's F11 RGB is 1, and actual-window inspection shows its dark ground blob.
+Evidence is under `analysis/walker_default_20261116/native`.
+
+The user closed their running game before installation. The previous exe/map
+are preserved under `analysis/walker_default_20261116/previous.*`, and the
+verified candidate is installed at the normal Release path. SHA-256:
+`1bc05fdba831383b50358ff0c9a048b83cdc699b916a51523630304e797836e9`.
+All 11 original save/settings files snapshotted before this private test
+match afterward. The owned test process ended; no user process was stopped.

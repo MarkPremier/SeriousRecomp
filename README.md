@@ -207,14 +207,15 @@ Suburbs save, the visible walker's shadow passes the GPU depth test, but the
 native lighting path supplies only 26/255 strength. Its sunlight-mask samples
 are zero, and the live mask matches the original disc data. The shadow texture
 reduces average darkening further, to roughly 3%. See the bring-up notes for
-the depth, strength and lighting comparisons. Shadow rendering has not been
-changed for normal launches.
+the depth, strength and lighting comparisons.
 
-To try stronger walker shadows, run `tools\test-walker-shadows.cmd`. This
-experimental launcher gives biomechanical walkers full blob-shadow
-strength. Launching the executable normally keeps the original appearance.
-The equivalent environment setting is `RECOMP_WALKER_SHADOW_MIN=1`;
-`0` disables the trial. This changes visibility, not the original sunlight mask.
+Biomechanical walkers now use full blob-shadow strength on normal launches.
+No special launcher is needed. This is a visibility adjustment; original Xbox
+parity remains unverified. Set `RECOMP_WALKER_SHADOW_MIN=0` to restore the
+original lighting-dependent strength for comparison, or use a value from 0.1
+through 1.0 to choose a minimum. The old `tools\test-walker-shadows.cmd`
+launcher still works and explicitly selects full strength. This changes
+visibility, not the original sunlight mask.
 
 ## What you need
 
