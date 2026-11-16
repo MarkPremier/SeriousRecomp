@@ -4,7 +4,8 @@ import re, sys
 
 gen = Path(sys.argv[1])
 functions = []
-for chunk, address in (("recomp_0004.c", "0004C580"), ("recomp_0015.c", "000CA160")):
+for chunk, address in (("recomp_0004.c", "0004C580"), ("recomp_0015.c", "000CA160"),
+                       ("recomp_0008.c", "00080040"), ("recomp_0008.c", "000800E0")):
     source = (gen / chunk).read_text()
     match = re.search(rf"void sub_{address}(?:_gen)?\(void\)", source)
     if not match:

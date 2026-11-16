@@ -10,10 +10,17 @@ ptrdiff_t g_xbox_mem_offset;
 #include "recomp_types.h"
 RECOMP_TLS int g_fp_cmp;
 RECOMP_TLS uint16_t g_fp_cc,g_fp_control_word=0x27F;
+RECOMP_TLS uint32_t g_eflags;
+RECOMP_TLS int g_df;
 uint32_t g_xbox_code_lo=0x10000,g_xbox_code_hi=0x3A9840;
 volatile uint32_t g_icall_trace[ICALL_TRACE_SIZE],g_icall_trace_idx;
 volatile uint64_t g_icall_count;
 void sub_001E5960(void) { g_eax=CW(CW(g_esp+4))==PLAYER_VT;g_esp+=4; }
+/* Difficulty/mode helpers do not own the SP flag. Exercise the original
+ * initializers themselves instead of inventing session flags in this test. */
+static int test_game_mode;
+void sub_0007FEF0(void) {g_esp+=4;}
+void sub_0007FE90(void) {CW(g_ecx+0x18)=test_game_mode;g_esp+=4;}
 static void inventory_updated(void) { ++g_eax;g_esp+=4; }
 recomp_func_t recomp_lookup(uint32_t va) {CHECK(va==0x100010);return inventory_updated;}
 recomp_func_t recomp_lookup_manual(uint32_t va) {return recomp_lookup(va);}
@@ -44,7 +51,18 @@ int main(void) {
     char path[MAX_PATH],tmp[MAX_PATH],value[48];GetTempPathA(MAX_PATH,tmp);GetTempFileNameA(tmp,"sch",0,path);
     g_xbox_mem_offset=(ptrdiff_t)calloc(1,0x800000);CHECK(g_xbox_mem_offset);
     pc_cheats_load(path);for(int i=0;i<CHEAT_ROWS;++i)CHECK(values[i]==0);
-    CW(NET)=net;CW(net+0x9CC+8)=1;CW(net+0x14)=0x640000;CW(0x640010)=0x650000;
+    CW(NET)=net;
+    g_esp=sp;CW(sp+4)=net+0x9CC;sub_00080040();
+    CHECK(g_esp==sp+8 && !CW(net+0x9CC+8) && CW(net+0x9CC+0x10)==1);
+    CHECK(pc_cheats_single_player());
+    /* The native cooperative/deathmatch constructors must remain excluded,
+     * even when only one local player is connected. */
+    for(test_game_mode=0;test_game_mode<=2;test_game_mode+=2) {
+        g_esp=sp;CW(sp+4)=net+0x9CC;sub_000800E0();
+        CHECK(g_esp==sp+8 && !pc_cheats_single_player());
+    }
+    g_esp=sp;CW(sp+4)=net+0x9CC;sub_00080040();
+    CW(net+0x14)=0x640000;CW(0x640010)=0x650000;
     CW(0x650000)=1;CW(0x650004)=p;CW(p)=PLAYER_VT;CF(p+0xE8)=100;
     CW(p+0x390)=w;CW(w+0x108)=p;CF(0x407A98)=1;CF(0x407AE0)=10;
     /* The actual translated powerup helper composes with the new multiplier
@@ -88,11 +106,11 @@ int main(void) {
     CW(sp)=0x70000;g_esp=sp;pc_cheats_timer(timer);CHECK(timer_value==1); /* non-weapon call */
     values[CHEAT_FLY]=1;g_ecx=p;g_esp=sp;pc_cheats_native_tick(native_tick);CHECK(CW(0x480754)==0 && g_esp==sp+4);
     /* Multiplayer, malformed objects, cinematics and dead players are inert. */
-    CW(net+0x9CC+8)=0;CF(p+0xE8)=100;CF(p+0x37C)=20;CW(w+0x300)=3;
+    CW(net+0x9CC+0x10)=0;CF(p+0xE8)=100;CF(p+0x37C)=20;CW(w+0x300)=3;
     g_ecx=p;g_esp=sp;CW(sp+4)=action;pc_cheats_player(original,grant);CHECK(CF(p+0x37C)==20 && CW(w+0x300)==3);
     g_esp=sp;CW(sp+4)=p;pc_cheats_damage(damage_original);CHECK(g_fp_stack[7]==4);
     g_ecx=w;g_esp=sp;CW(sp)=0xDB9C2;CF(sp+4)=1;pc_cheats_timer(timer);CHECK(timer_value==1);
-    CW(net+0x9CC+8)=1;CW(p+0x3F0)=0x660000;frame();CHECK(CF(p+0x37C)==20);CW(p+0x3F0)=0;
+    CW(net+0x9CC+0x10)=1;CW(p+0x3F0)=0x660000;frame();CHECK(CF(p+0x37C)==20);CW(p+0x3F0)=0;
     CF(p+0xE8)=0;frame();CHECK(CF(p+0xE8)==0);CF(p+0xE8)=100;
     CW(0x650004)=0xFFFFFFFC;CHECK(!local_player());CW(0x650004)=p;
     /* Reset/persistence, wrapping multipliers and scoped frontend unlocks. */

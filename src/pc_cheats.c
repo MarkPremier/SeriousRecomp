@@ -49,8 +49,10 @@ static uint32_t network(void) {
 int pc_cheats_single_player(void) {
     uint32_t net = network();
     /* CNetworkLibrary::GetSessionProperties is lea eax,[ecx+0x9CC].
-     * SessionProperties::sp_bSinglePlayer is +8, separate from cooperative. */
-    return GetCurrentThreadId() == owner_thread && net && CW(net + 0x9CC + 8) == 1;
+     * The USA single-player initializer (0x80040) sets +0x10 to one and
+     * +8 to zero. Cooperative multiplayer also sets +0x0C, so that flag
+     * alone must not admit a multiplayer session. */
+    return GetCurrentThreadId() == owner_thread && net && CW(net + 0x9CC + 0x10) == 1;
 }
 static uint32_t local_player(void) {
     uint32_t net = network(), session, players, player;

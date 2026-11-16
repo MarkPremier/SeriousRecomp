@@ -16,6 +16,19 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state
 
+- **Saved-game cheat correction (2026-11-16):** the initial cheat gate read
+  the wrong property. Single-player is network +0x9CC +0x10, NOT +8. This is
+  verified from original initializers `80040`/`800E0` and a copied Suburbs save.
+  Tests now extract both initializers; 14 tests pass. The corrected private
+  launch held health/armor near 200 and refilled all nine ammo types. See
+  `analysis/cheats_saved_game_20261116`. The user's physical Escape stopped
+  Computer Use during verification; no further window inputs were sent.
+  The open candidate window uses private saves, not the user's real save root.
+  A new F11 Suburbs capture establishes a low-strength (26/255) shadow quad
+  under the close walker; the missing/faint appearance and separately reported
+  polygon-shaped floor seam remain under investigation. Evidence is in
+  `analysis/shadows_suburbs_20261116`; no renderer change is claimed.
+
 - **Cheats (2026-11-16):** main-menu Cheats plus a remembered, default-off
   "Show in pause menu" switch. `src/pc_cheats.c` owns the choices and
   single-player-only effects; `src/pc_cheats_menu.inc` shares the native PC

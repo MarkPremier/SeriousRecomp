@@ -2318,8 +2318,9 @@ entity timer `0x1E6F00`. Manual wrappers preserve full regeneration through
 the existing `--exclude-manual` pipeline. No engine reference implementation
 was copied or adapted, and no runtime source was edited.
 
-The network object's session properties are at +0x9CC; the +8 single-player
-flag gates effects independently of cooperative mode or local-player count.
+The network object's session properties are at +0x9CC. The original version
+incorrectly used +8 as the single-player flag; the correction below establishes
+the actual +0x10 field from the Xbox initializer and a loaded save.
 Player pointers, ownership and the player vtable are checked. Speed/jump,
 native flight and ammo flags are scoped around their original calls; health
 does not revive a dead player. Double jump accepts one additional press while
@@ -2357,3 +2358,49 @@ this is log evidence of progression, not visual or gameplay verification.
 All eleven snapshotted user save/profile/settings files still match their
 pre-test SHA-256 hashes. The runtime's pre-existing memory-layout modification
 and all Turok worktrees remain untouched. No release or remote changes were made.
+
+## 2026-11-16: cheats rejected a real single-player save
+
+The user's existing Suburbs save reproduced the reported failure. The copied
+session had property words +8=0, +0x0C=1 and +0x10=1, a valid player vtable
+`0x3ABCD0`, health 74.33437, armor 25 and partial ammo. The cheat gate used
++8, so every effect was incorrectly rejected as multiplayer. This was an
+implementation error, not an incompatibility requiring a new game.
+
+The original Xbox single-player initializer `0x80040` explicitly writes zero
+to +8 and one to +0x10. Its multiplayer initializer `0x800E0` writes zero to
++0x10, including cooperative mode. The gate now uses +0x10. The regression
+extracts both original generated initializers and tests their real flag writes,
+including cooperative and competitive multiplayer. Previously the synthetic
+fixture had supplied the same incorrect flag as the implementation. All 14
+title regressions now pass with the independent initializer coverage.
+
+A private normal-discovery candidate loaded the copied existing Suburbs save
+and reported single-player=1. Health and armor each remained approximately 200
+(199.975 between the original overheal-decay update and the next action),
+and all nine ammo counts matched their capacities. The normal executable was
+initially open in the user's session, so the candidate built to a private output
+directory. After that process ended the verified candidate was installed at the
+normal Release path. No user process was terminated. The candidate test window
+was left open after the user's physical Escape stopped Computer Use; it uses
+private saves and settings under `analysis/cheats_saved_game_20261116/native`.
+
+## 2026-11-16: renewed Suburbs walker/floor investigation
+
+The user's F11 capture, copied to `analysis/shadows_suburbs_20261116`, matches
+the close walker screenshot. It contains nine simple-shadow quads. The last
+quad projects approximately to x=234..317, y=195..220 in the logical 640x480
+image, beneath the foreground walker. Its corners all have positive W and
+RGB strength 26/255 (10.196%). The first distant quad is full-strength; the
+remaining eight use the low strength. The draw uses the expected multiplicative
+ZERO/ONE_MINUS_SRC_COLOR blend and depth testing without depth writes.
+Submission is therefore established for this captured walker; whether GPU
+depth/culling/sampling suppresses it or its low intensity explains the image
+remains unresolved. No renderer correction is claimed.
+
+The separate floor screenshot shows a sharp polygon-shaped change in texture
+or lighting. The walker capture does not cover that same view, and original
+Xbox/xemu parity is still unverified. It cannot yet be classified as original
+level authoring or a recomp defect. Computer Use became available for this
+session, but a physical Escape stopped it during the private saved-game check;
+no further window input was issued afterward.

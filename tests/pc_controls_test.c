@@ -129,12 +129,12 @@ static void cheats_menu_test(void)
     WORD(first+GADGET_FOCUSED)=1;WORD(first+GADGET_VISIBLE)=WORD(last+GADGET_VISIBLE)=1;
     WORD(first+GADGET_DOWN)=last;WORD(first+GADGET_UP)=last;WORD(last+GADGET_DOWN)=first;WORD(last+GADGET_UP)=first;
     FLOAT(first+GADGET_Y)=200;FLOAT(last+GADGET_Y)=300;FLOAT(last+GADGET_SCALE)=0.7f;
-    WORD(NETWORK)=0x700000;WORD(0x700000+0x9CC+8)=1;
+    WORD(NETWORK)=0x700000;WORD(0x700000+0x9CC+0x10)=1;
     WORD(ACTIVE_MENU)=PAUSE_MENU;pc_controls_menu_drawn();cheats_entries_frame();
     CHECK(WORD(pause_cheats_entry+GADGET_VISIBLE) && WORD(last+GADGET_DOWN)==pause_cheats_entry);
     CHECK(!WORD(cheats_entry+GADGET_VISIBLE));
     pc_cheats_step(CHEAT_PAUSE_MENU,1);cheats_entries_frame();CHECK(!WORD(pause_cheats_entry+GADGET_VISIBLE) && WORD(last+GADGET_DOWN)==first);
-    pc_cheats_step(CHEAT_PAUSE_MENU,1);WORD(0x700000+0x9CC+8)=0;cheats_entries_frame();CHECK(!WORD(pause_cheats_entry+GADGET_VISIBLE));
+    pc_cheats_step(CHEAT_PAUSE_MENU,1);WORD(0x700000+0x9CC+0x10)=0;cheats_entries_frame();CHECK(!WORD(pause_cheats_entry+GADGET_VISIBLE));
     pc_cheats_step(CHEAT_RESET,1);
 }
 
