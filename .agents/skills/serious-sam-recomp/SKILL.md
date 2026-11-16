@@ -16,6 +16,27 @@ It is in active use by another agent, so **read it, but never modify it** (see
 
 ## Current state
 
+- **Walker investigation and user constraints (2026-11-16):** the user has
+  explicitly stopped screen viewing. Continue with source and text diagnostics;
+  do not use Computer Use, screenshots or image inspection without a new request.
+  Preserve the current save. A verified independent backup of UDATA, TDATA,
+  settings and all six save partitions is in
+  `analysis/walker_path_audit_20261116/save_backup_20261116` (17 manifest entries).
+  Private diagnostics use older copies under `analysis`, never `test_clean`.
+  A native projector audit passes 155 cases for both walkers, bull and beheaded
+  model boxes. Shared native virtual methods and shadow eligibility show no
+  walker-specific rejection. The Dunes text run verifies 11 cached lighting UVs
+  and 55 mask samples against independent calculations and original level data;
+  its walker/bull/beheaded matches are unrendered preplaced actors, so this is
+  not a visible-enemy comparison. A later private Suburbs replay verifies all
+  18 ground-to-mask coordinates and 15 masked samples, including six rendered
+  walkers: one samples sunlight 1, five sample 0. All have model alpha 255.
+  The zero-sample walkers' surrounding mask bits are all zero in original
+  level data. This supports location-dependent lighting rather than a disabled
+  walker shadow path; original hardware and active Dunes enemy parity remain
+  unverified. See the latest bring-up audit and ignored JSON evidence.
+  Installed executable remains v0.1.6-beta, SHA-256 beginning `1bc05fdb`.
+
 - **Normal-launch walker shadows (2026-11-16):** the user still saw no shadows
   because Beta v0.1.5's ordinary executable left the override disabled. Its
   running-game log had no shadow-enable line. `pc_shadows_load` now defaults

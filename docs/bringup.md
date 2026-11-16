@@ -2552,3 +2552,64 @@ verified candidate is installed at the normal Release path. SHA-256:
 `1bc05fdba831383b50358ff0c9a048b83cdc699b916a51523630304e797836e9`.
 All 11 original save/settings files snapshotted before this private test
 match afterward. The owned test process ended; no user process was stopped.
+
+### Walker shadow source and geometry audit
+
+The user requested investigating the underlying lighting behavior across levels,
+comparing walkers with the headless bomber and bull. They also explicitly stopped
+screen viewing and required preserving the current save. This audit uses original
+XBE instructions, generated CPU routines, and private text diagnostics only.
+
+Walker vtable `3AD9D8`, bull `3AD5D0`, and beheaded `3B1DB0` share placement,
+shading-adjustment and skeletal-instance methods at offsets `48`, `B0`, and `BC`.
+The shared native shadow eligibility function `1BBEC0` returns true. The native
+skeletal renderer is the only generated caller of simple-shadow entry `1BC270`.
+Both walker variants use the same constructor and are covered by the existing
+strength workaround. No walker-specific shadow rejection was found here.
+
+Original `.bmc` boxes give the minor walker and bull the same 3.75 by 3.75
+ground footprint after instance scaling and the native 1.25 margin. The major
+walker produces 7.5 by 7.5; beheaded variants produce 0.9375 by 0.9375. A private
+fixture executes the actual generated projector `1CD120` and its geometry
+helpers: five model configurations, five distances, three yaw angles, two
+strengths, plus the viewer-on-plane rejection cases. All 155 cases pass checks
+for footprint, finite output, above-plane bias, color and guest stack/FPU balance.
+The native distance bias is 0.005, with a 0.01 minimum.
+
+The private Dunes run produced 11 usable cached lighting coordinates and 55
+masked-light samples. Independent calculations match all of them. Captured mask
+bytes occur unchanged in the original `Levels/FE07_Dunes.wld`. The run also
+finds 11 walker, five bull and six beheaded vtable matches, but these actors have
+not rendered and their ground caches are empty. They cannot substantiate an
+active walker-versus-bull comparison. This evidence does not prove parity with
+original hardware, nor does it identify a new production correction.
+
+A subsequent private Suburbs replay reproduces the previously recorded input
+sequence, then requests native lighting-cache refresh. All 18 cached
+ground-to-mask coordinates and 15 masked-light samples match independent
+calculations. The masks exactly match the original level file at offsets
+158867 and 150480. Crucially, the same walker class samples sunlight 1 at
+`(-82.5, 0.00275, 654.25)`, but 0 at five other rendered positions, including
+`(-70, 0.00275, 734)`, `(-70, 0.00275, 774)`, and the close pair around
+`(-33.6, 0.00475, 801.5)` / `(-14.5, 0.00101, 789.7)`. All six have model
+alpha 255. The zero results come from four zero mask bits, not from interpolation
+rounding. Their selected ground points lie on the captured horizontal ground
+plane to numerical precision. This narrows the discrepancy to location-dependent
+lighting and supports the prior upstream-of-drawing diagnosis. It is not proof
+that every receiver-polygon choice matches Xbox, or that the user's other level
+has the same cause. No active walker/bomber/bull comparison was obtained in Dunes.
+
+Evidence and fixture source are ignored under
+`analysis/walker_path_audit_20261116`. The diagnostic executable has a hidden
+window and muted host audio; it issues no framebuffer capture. Only its own
+process and copied game data are used. Where needed, clearing that process's
+native valid-shading cache flag requests a normal recalculation; no positions,
+light masks or shadow strengths are changed by that request.
+
+The current real save was independently backed up first, including UDATA,
+TDATA, settings and all six save partitions. All 17 backup manifest hashes were
+verified. A later check also confirms all 11 original profile/settings files
+still match. Backup and restore notes are in
+`analysis/walker_path_audit_20261116/save_backup_20261116`. The installed v0.1.6
+executable remains byte-identical (`1bc05fdb...`); no additional fix or release
+is claimed from this audit.
