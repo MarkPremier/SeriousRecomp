@@ -38,7 +38,10 @@ static int values[CHEAT_ROWS];
 static const float multipliers[] = {1, 1.5f, 2, 3, 5};
 static char cheats_ini[MAX_PATH];
 static uint32_t jump_player, granted_player, granted_weapons;
-static int jump_held, extra_jump;
+static int jump_held, was_ground, extra_jump;
+#define EYE_HEIGHT_STAND 0x407AE0u /* 1.9 */
+#define JUMP_SPEED 0x407ADCu       /* 11.0, upward translation limit */
+#define SUPER_JUMP_SPEED 1.6f      /* about 2.5x the original jump height */
 static DWORD owner_thread;
 static int valid(uint32_t a, uint32_t n) { return a >= 0x10000 && a < 0x08000000 && n <= 0x08000000 - a; }
 
@@ -77,7 +80,7 @@ void pc_cheats_load(const char *path) {
         values[i] = v >= 0 && v <= options[i].max ? v : 0;
     }
     jump_player = granted_player = granted_weapons = 0;
-    jump_held = extra_jump = 0;
+    jump_held = was_ground = extra_jump = 0;
 }
 const char *pc_cheats_label(int row) { return row >= 0 && row < CHEAT_ROWS ? options[row].label : ""; }
 void pc_cheats_value(int row, char *out, size_t size) {
@@ -131,10 +134,14 @@ void pc_cheats_player(void (*original)(void), void (*give_all)(void)) {
         jump_player = 0;
         original(); return;
     }
-    uint32_t speed = CW(0x407A98), jump = CW(0x407AE0), fly = CW(0x480754);
+    uint32_t speed = CW(0x407A98), fly = CW(0x480754);
     uint32_t props = network() + 0x9CC, ammo = CW(props + 0x50);
+    /* Beta v0.1.5 doubled 0x407AE0 for super jump, but that is the standing
+     * eye height (1.9), copied into the viewpoint +0x348 on state changes.
+     * A raised camera could outlive the option and persist in saves. Undo
+     * exactly that doubled value; the original never produces 3.8. */
+    if (CF(p + 0x348) == 2 * CF(EYE_HEIGHT_STAND)) CF(p + 0x348) = CF(EYE_HEIGHT_STAND);
     if (values[CHEAT_SPEED]) CF(0x407A98) = multipliers[values[CHEAT_SPEED]];
-    if (values[CHEAT_SUPER_JUMP]) CF(0x407AE0) *= 2;
     if (values[CHEAT_FLY]) CW(0x480754) = 1;
     if (values[CHEAT_AMMO]) CW(props + 0x50) = 1;
     if (values[CHEAT_HEALTH]) CF(p + 0xE8) = 200;
@@ -148,19 +155,39 @@ void pc_cheats_player(void (*original)(void), void (*give_all)(void)) {
          * count (even word). Keep the inventory/weapon mask intact here. */
         for (uint32_t a = 0x300; a <= 0x340; a += 8) CW(w + a) = CW(w + a + 4);
     }
+    /* The action's +4 is the vertical translation the builder 0x70810 sets
+     * to +/-plr_fSpeedUp (0x407ADC, 11.0) while Jump/Crouch is held. The
+     * physics applies the jump after this routine, so the cheats act on the
+     * world velocity +0x120 (y at +0x124) once the takeoff is visible. */
     int down = CF(action + 4) > 0.5f;
     int ground = CW(p + 0x138) != 0;
-    if (jump_player != p) { jump_player = p; jump_held = down; extra_jump = 0; }
+    if (jump_player != p) { jump_player = p; jump_held = down; was_ground = ground; extra_jump = 0; }
     if (ground) extra_jump = 0;
-    int boost = values[CHEAT_DOUBLE_JUMP] && !values[CHEAT_FLY] && !ground && down && !jump_held && !extra_jump;
+    int air_ok = !values[CHEAT_FLY] && !ground;
+    int takeoff = values[CHEAT_SUPER_JUMP] && air_ok && was_ground && (down || jump_held) && CF(p + 0x124) > 0;
+    int boost = values[CHEAT_DOUBLE_JUMP] && air_ok && down && !jump_held && !extra_jump;
     jump_held = down;
+    was_ground = ground;
     original();
-    if (boost && CF(p + 0xE8) > 0) {
-        CF(p + 0x348) = CF(0x407AE0); extra_jump = 1;
+    if (CF(p + 0xE8) > 0) {
+        float jump_scale = values[CHEAT_SUPER_JUMP] ? SUPER_JUMP_SPEED : 1;
+        static unsigned logged;
+        float before = CF(p + 0x124);
+        if (takeoff) CF(p + 0x124) *= SUPER_JUMP_SPEED;
+        if (boost) {
+            float up = CF(JUMP_SPEED) * jump_scale;
+            if (CF(p + 0x124) < up) CF(p + 0x124) = up;
+            extra_jump = 1;
+        }
+        if ((takeoff || boost) && logged < 64) {
+            ++logged;
+            fprintf(stderr, "[PC CHEATS] %s vy %.2f -> %.2f (y %.2f)\n", takeoff ? "super jump" : "double jump",
+                    before, CF(p + 0x124), CF(p + 0x40));
+        }
     }
     if (values[CHEAT_HEALTH] && CF(p + 0xE8) > 0) CF(p + 0xE8) = 200;
     if (values[CHEAT_ARMOR] && CF(p + 0xE8) > 0) CF(p + 0x37C) = 200;
-    CW(0x407A98)=speed;CW(0x407AE0)=jump;CW(0x480754)=fly;CW(props+0x50)=ammo;
+    CW(0x407A98)=speed;CW(0x480754)=fly;CW(props+0x50)=ammo;
 }
 void pc_cheats_damage(void (*original)(void)) {
     uint32_t source = CW(g_esp + 4);

@@ -37,7 +37,6 @@ static void player_original(void) {
     ++calls;
     if(!CW(p+0x3F0) && CF(p+0xE8)>0) {
         if(values[CHEAT_SPEED]) CHECK(CF(0x407A98)==multipliers[values[CHEAT_SPEED]]);
-        if(values[CHEAT_SUPER_JUMP]) CHECK(CF(0x407AE0)==20);
     }
     CHECK(g_ecx==p);g_esp+=8;
 }
@@ -64,7 +63,7 @@ int main(void) {
     g_esp=sp;CW(sp+4)=net+0x9CC;sub_00080040();
     CW(net+0x14)=0x640000;CW(0x640010)=0x650000;
     CW(0x650000)=1;CW(0x650004)=p;CW(p)=PLAYER_VT;CF(p+0xE8)=100;
-    CW(p+0x390)=w;CW(w+0x108)=p;CF(0x407A98)=1;CF(0x407AE0)=10;
+    CW(p+0x390)=w;CW(w+0x108)=p;CF(0x407A98)=1;CF(0x407AE0)=1.9f;CF(0x407ADC)=11;
     /* The actual translated powerup helper composes with the new multiplier
      * and preserves its x87 return stack. The actual GiveAll maps capacities. */
     CF(0x3A9BDC)=1;CF(0x3A9D9C)=4;CF(p+0x224)=10;CF(p+0x1128)=0;
@@ -85,17 +84,31 @@ int main(void) {
     for(int i=CHEAT_HEALTH;i<CHEAT_RESET;++i)values[i]=1;
     for(uint32_t a=0x300;a<=0x340;a+=8)CW(w+a+4)=60;
     frame();CHECK(CF(p+0xE8)==200 && CF(p+0x37C)==200 && grants==1);
-    CHECK(CF(0x407A98)==1 && CF(0x407AE0)==10 && !CW(0x480754) && !CW(net+0x9CC+0x50));
+    CHECK(CF(0x407A98)==1 && CF(0x407AE0)==1.9f && CF(0x407ADC)==11 && !CW(0x480754) && !CW(net+0x9CC+0x50));
     for(uint32_t a=0x300;a<=0x340;a+=8)CHECK(CW(w+a)==60);
     frame();CHECK(grants==1); /* not every frame */
     CW(w+0x120)=0;frame();CHECK(grants==2); /* inventory reset on a new level */
     values[CHEAT_FLY]=0;values[CHEAT_SUPER_JUMP]=0;
     CF(action+4)=0;CW(p+0x138)=1;frame();
-    CF(action+4)=1;frame();CW(p+0x138)=0;CF(action+4)=0;frame();
-    CF(p+0x348)=-4;CF(action+4)=1;frame();CHECK(CF(p+0x348)==10);
-    CF(p+0x348)=-4;frame();CHECK(CF(p+0x348)==-4); /* holding cannot fly */
-    CF(action+4)=0;frame();CF(action+4)=1;frame();CHECK(CF(p+0x348)==-4); /* one extra only */
-    CW(p+0x138)=1;frame();CW(p+0x138)=0;CF(action+4)=0;frame();CF(action+4)=1;frame();CHECK(CF(p+0x348)==10);
+    CF(action+4)=1;frame();CW(p+0x138)=0;CF(action+4)=0;CF(p+0x124)=9;frame();CHECK(CF(p+0x124)==9); /* no super jump */
+    CF(p+0x124)=-4;CF(action+4)=1;frame();CHECK(CF(p+0x124)==11);
+    CF(p+0x124)=-4;frame();CHECK(CF(p+0x124)==-4); /* holding cannot fly */
+    CF(action+4)=0;frame();CF(action+4)=1;frame();CHECK(CF(p+0x124)==-4); /* one extra only */
+    CW(p+0x138)=1;frame();CW(p+0x138)=0;CF(action+4)=0;frame();CF(action+4)=1;frame();CHECK(CF(p+0x124)==11);
+    /* Super jump scales the original takeoff velocity once and never touches
+     * the standing eye height (0x407AE0 -> viewpoint +0x348). */
+    values[CHEAT_SUPER_JUMP]=1;CF(p+0x348)=1.9f;
+    CF(action+4)=0;CW(p+0x138)=1;frame();
+    CF(action+4)=1;frame();CHECK(CF(p+0x348)==1.9f && CF(0x407AE0)==1.9f);
+    CW(p+0x138)=0;CF(p+0x124)=10;frame();CHECK(CF(p+0x124)==16);
+    frame();CHECK(CF(p+0x124)==16); /* once per takeoff */
+    CF(action+4)=0;frame();CF(p+0x124)=-2;CF(action+4)=1;frame();CHECK(CF(p+0x124)==11*1.6f); /* super double jump */
+    /* Leaving the ground without Jump (ledge, ramp crest) is not a takeoff. */
+    CF(action+4)=0;CW(p+0x138)=1;frame();CW(p+0x138)=0;CF(p+0x124)=5;frame();CHECK(CF(p+0x124)==5);
+    /* A camera left raised by Beta v0.1.5's super jump is restored. */
+    CF(p+0x348)=3.8f;frame();CHECK(CF(p+0x348)==1.9f);
+    CF(p+0x348)=0.7f;frame();CHECK(CF(p+0x348)==0.7f); /* crouch untouched */
+    values[CHEAT_SUPER_JUMP]=0;CF(p+0x348)=3.8f;frame();CHECK(CF(p+0x348)==1.9f); /* even with the option off */
     values[CHEAT_DAMAGE]=3;g_esp=sp;CW(sp+4)=p;pc_cheats_damage(damage_original);CHECK(g_fp_stack[7]==12 && g_esp==sp+4);
     g_esp=sp;CW(sp+4)=p+4;pc_cheats_damage(damage_original);CHECK(g_fp_stack[7]==4);
     int before=calls;g_ecx=p;g_esp=sp;pc_cheats_receive_damage(receive);CHECK(calls==before && g_esp==sp+24 && CF(p+0xE8)==200);

@@ -2613,3 +2613,31 @@ still match. Backup and restore notes are in
 `analysis/walker_path_audit_20261116/save_backup_20261116`. The installed v0.1.6
 executable remains byte-identical (`1bc05fdb...`); no additional fix or release
 is claimed from this audit.
+
+## 2026-11-21: super jump and double jump (issue #3)
+
+The issue #3 reporter found that double jump behaved like a super jump and
+that the super jump effect stayed after both options were turned off. The
+original cheats doubled `0x407AE0`, which the USA XBE initialises to 1.9:
+the standing eye height (`0x407AE4` 0.7 crouch, `0x407AE8` 0.4 swim). The
+player routine `0x74D90` copies it into the viewpoint `+0x348` on stance
+changes, so the camera stayed raised until the next stance change and could
+be saved. Double jump wrote the same field, not a velocity.
+
+The real jump speed is `plr_fSpeedUp` at `0x407ADC` (11.0). The action
+builder `0x70810` sets the action's vertical translation to +/-11 while Jump or
+Crouch is held. Player `+0x120` is the world velocity, with y at `+0x124`
+(the 11-10 movement samples peak at 10, the forward speed, and the camera
+sits 1.9 above `+0x3C`). The cheats now act on that velocity after the
+original routine: super jump scales a Jump-held takeoff once by 1.6 (about
+2.5x height); double jump raises vertical speed to a full (or super) jump on
+one fresh airborne press, resetting on landing. A viewpoint height of exactly
+2 x 1.9 is restored to 1.9 on every alive-action tick, repairing affected
+saves. `0x407AE0` is no longer modified.
+
+All 15 CTests pass; the cheat test covers takeoff scaling, the once-per-jump
+rule, ledges without Jump, super double jump and the camera repair. In the
+user's Suburbs session, every super-jump takeoff logged 11.00 -> 17.60, and
+double jumps raised speeds from -7.9..7.1 to 17.6. The user also confirmed that
+the straight diagonal ground shadow line near the Suburbs rooftops appears on
+original hardware.
