@@ -9,6 +9,7 @@
 #include <math.h>
 #include "pc_controls.h"
 #include "pc_settings.h"
+#include "pc_stick.h"
 #include "pc_cheats.h"
 #include <xbox/xboxrecomp.h>
 
@@ -156,7 +157,7 @@ static const struct {
         {"third_person", "Third-person view", 'H', 0x480548},
         {"pause", "Pause", VK_ESCAPE, 0},
 };
-enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, DEFAULTS_ROW, ROW_COUNT };
+enum { SPEED_ROW = BIND_COUNT, INVERT_ROW, DEADZONE_ROW, DEFAULTS_ROW, ROW_COUNT };
 /* The page's BACK button is the stop after the last row, so up/down (keys or a
  * pad) reach it as they reach the rows; Enter/A there goes back. */
 #define BACK_SELECTED ROW_COUNT
@@ -305,6 +306,8 @@ static void save(void)
     snprintf(label, sizeof label, "%d", speed);
     WritePrivateProfileStringA("pc_controls", "mouse_speed", label, ini);
     WritePrivateProfileStringA("pc_controls", "invert_y", invert_y ? "1" : "0", ini);
+    pc_stick_label(pc_stick_choice(), label, sizeof label);
+    WritePrivateProfileStringA("pc_controls", "stick_deadzone", label, ini);
 }
 
 static void apply(void)
@@ -358,9 +361,14 @@ void pc_controls_load(void)
     speed = (int)GetPrivateProfileIntA("pc_controls", "mouse_speed", 5, ini);
     if (speed < 1 || speed > 10) speed = 5;
     invert_y = GetPrivateProfileIntA("pc_controls", "invert_y", 0, ini) == 1;
+    GetPrivateProfileStringA("pc_controls", "stick_deadzone", "Original", text, sizeof text, ini);
+    pc_stick_set_choice(pc_stick_parse(text));
+    pc_stick_install();
     pc_settings_load(ini);
     pc_cheats_load(ini);
-    fprintf(stderr, "[PC CONTROLS] keyboard/mouse %s; settings %s\n", enabled ? "enabled" : "disabled", ini);
+    pc_stick_label(pc_stick_choice(), text, sizeof text);
+    fprintf(stderr, "[PC CONTROLS] keyboard/mouse %s; stick deadzone %s; settings %s\n",
+            enabled ? "enabled" : "disabled", text, ini);
 }
 
 static uint32_t alloc(uint32_t bytes)
@@ -455,6 +463,11 @@ static void update_page(void)
             snprintf(label, sizeof label, "< %d / 10 >", speed);
         else if (i == INVERT_ROW)
             snprintf(label, sizeof label, "< %s >", invert_y ? "On" : "Off");
+        else if (i == DEADZONE_ROW) {
+            char zone[16];
+            pc_stick_label(pc_stick_choice(), zone, sizeof zone);
+            snprintf(label, sizeof label, pc_stick_choice() ? "< %s%% >" : "< %s >", zone);
+        }
         else
             snprintf(label, sizeof label, "Enter / A");
         text(values[i], label);
@@ -512,6 +525,7 @@ void pc_controls_build_menu(void)
         const char *label = i < BIND_COUNT    ? actions[i].label
                             : i == SPEED_ROW  ? "Mouse speed"
                             : i == INVERT_ROW ? "Invert mouse Y"
+                            : i == DEADZONE_ROW ? "Stick deadzone"
                                               : "Restore defaults";
         rows[i] = button(page, label, 90, 145, 0.57f);
         values[i] = button(page, "", 410, 145, 0.57f);
@@ -641,10 +655,14 @@ static void change_row(int direction)
             if (speed > 10) speed = 10;
         } else if (selected == INVERT_ROW)
             invert_y = !invert_y;
+        else if (selected == DEADZONE_ROW)
+            pc_stick_set_choice((pc_stick_choice() + PC_STICK_CHOICES + (direction < 0 ? -1 : 1)) %
+                                PC_STICK_CHOICES);
         else {
             for (int i = 0; i < BIND_COUNT; ++i) keys[i] = actions[i].key;
             speed = 5;
             invert_y = 0;
+            pc_stick_set_choice(0);
         }
         apply();
         save();

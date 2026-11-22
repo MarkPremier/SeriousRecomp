@@ -2641,3 +2641,29 @@ user's Suburbs session, every super-jump takeoff logged 11.00 -> 17.60, and
 double jumps raised speeds from -7.9..7.1 to 17.6. The user also confirmed that
 the straight diagonal ground shadow line near the Suburbs rooftops appears on
 original hardware.
+
+## 2026-11-22: optional stick deadzone (issue #5)
+
+Issue #5 reports very large controller deadzones. They are the original
+game's own, in two per-axis stages. The engine's pad setup `0x1DD1D0` gives
+every half axis min 8000 / max 0x7FFF, and the poll `0x1DC9B0` stores
+`max(0, |raw| - 8000) / 24767`. Every move/look control in
+`Controls/Xbox/00Axes.ctl`..`03Axes.ctl` (Main.gro) then has `DeadZone: 0.2`,
+applied at `0x45ABB` as `clamp((v - 0.2) / 0.8)`. Nothing registers until
+about 40% of stick travel (raw 12953), and because both stages are per axis,
+small diagonals lose their smaller component. The runtime passes XInput
+values through unchanged (its own deadzone is 0).
+
+**Options > PC Controls > Stick deadzone** offers Original (default), 5%, 10%,
+15% and 20%, saved as `[pc_controls] stick_deadzone`. Modern choices apply a
+round deadzone to the host stick, stretch the remaining circle to the game's
+square (a full diagonal still reaches 1 on both axes), then emit the raw value
+whose result after both original stages is exactly the wanted deflection.
+The toolkit gained a generic `xbox_InputSetStickFilter` hook, called for a
+real pad after the axis map; the title-specific mapping is `src/pc_stick.c`.
+
+All 16 CTests pass; `pc_stick_test` models both original stages and checks
+the smooth start, linear scale, preserved diagonal directions, full diagonal
+speed, monotonic response and INI labels. The user tested 10% with a
+controller and reported that it feels good; the log shows the choice and the
+host pad on port 0.

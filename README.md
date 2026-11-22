@@ -186,7 +186,9 @@ executable's, so other releases are refused. Saves go in the game folder's
 so the first sight of a new effect may hitch once.
 
 An Xbox/XInput controller works as on the console; keyboard and mouse work too
-(see [PC controls](#pc-controls)). **Options > PC Settings** has resolution,
+(see [PC controls](#pc-controls)). The original game ignores about the first
+40% of each stick direction; **Options > PC Controls > Stick deadzone** can
+replace that with a round 5–20% deadzone (Original stays the default). **Options > PC Settings** has resolution,
 aspect ratio (widescreen/ultrawide), display mode, VSync, frame limit,
 anisotropic filtering and MSAA. Escape, Enter, Space or a click skips movies.
 The main menu has no music; that is how the original plays.
@@ -269,7 +271,8 @@ C are ignored by Git. The Turok runtime is never used as a shared output directo
 The runtime fixes above are local `serious-sam` commits `af664e0` (audio),
 `fd2954b` (shader caches), `bee76c6` (DSP memory ownership) and `9821b58`
 (remainder completion and SAHF flags), with the subsequent math-safety
-fixes through `0263c30` and F11 shadow diagnostics `0a3d6c6`. For an earlier
+fixes through `0263c30`, F11 shadow diagnostics `0a3d6c6` and the stick filter
+hook `7fb790c`. For an earlier
 runtime at `f5f395f`, the same changes
 are included in `patches/xboxrecomp-serious-sam-stability.patch`; apply it once
 before building if those fixes are absent:
@@ -374,7 +377,9 @@ Use the arrows or controller to select a row, then Enter/A to bind a key, mouse
 button or wheel direction. A duplicate binding swaps with its previous action;
 Delete or right-click clears a binding. Escape/B cancels or returns. The page
 scrolls with the selection or mouse wheel; its rows and Back button accept clicks.
-Mouse speed (1–10), invert Y and Restore defaults are on the same page.
+Mouse speed (1–10), invert Y, Stick deadzone and Restore defaults are on the
+same page. Stick deadzone is Original (the game's own, about 40% per axis) or a
+round 5%, 10%, 15% or 20% deadzone; full diagonals keep their original speed.
 
 | Action | Default |
 |---|---|

@@ -55,6 +55,8 @@ VOID __stdcall xbox_HalReturnToFirmware(ULONG routine){CHECK(routine==2);++quits
 void xbox_KbmSetMenuMode(int on){(void)on;}
 void xbox_KbmSetRawMouse(int on){raw_mouse=on;}
 void xbox_KbmSetCapture(int on){capture=on;}
+static void *stick_filter_installed;
+void xbox_InputSetStickFilter(void *filter){stick_filter_installed=filter;}
 void xbox_KbmSetBinding(const char *target,const int *binding,int count){(void)target;(void)binding;(void)count;}
 static int a_pulses,dpad_pulses[4],notches;
 void xbox_KbmPulse(const char *target,int ms){
@@ -254,6 +256,14 @@ int main(void)
     CHECK(named_key("1")=='1' && named_key("Wheel down")==WHEEL_DOWN && named_key("garbage")==-1);
     WritePrivateProfileStringA("paths","game_dir","unchanged",path);
     save();keys[FAVORITE1]=0;pc_controls_load();CHECK(keys[FAVORITE1]=='1');
+    /* Stick deadzone: Original by default, cycles both ways, persists, resets. */
+    CHECK(stick_filter_installed && pc_stick_choice()==0);
+    selected=DEADZONE_ROW;change_row(1);change_row(1);CHECK(pc_stick_choice()==2);
+    pc_stick_set_choice(0);pc_controls_load();CHECK(pc_stick_choice()==2);
+    GetPrivateProfileStringA("pc_controls","stick_deadzone","",label,sizeof label,path);CHECK(!strcmp(label,"10"));
+    change_row(-1);change_row(-1);change_row(-1);CHECK(pc_stick_choice()==PC_STICK_CHOICES-1);
+    WritePrivateProfileStringA("pc_controls","stick_deadzone","bogus",path);pc_controls_load();CHECK(pc_stick_choice()==0);
+    change_row(1);selected=DEFAULTS_ROW;change_row(1);CHECK(pc_stick_choice()==0);selected=0;
     GetPrivateProfileStringA("paths","game_dir","",label,sizeof label,path);CHECK(!strcmp(label,"unchanged"));
     set_key(FIRE,VK_SPACE);CHECK(keys[FIRE]==VK_SPACE && keys[JUMP]==MOUSE1 && raw_mouse);
     set_key(FIRE,0);CHECK(keys[FIRE]==0 && keys[JUMP]==MOUSE1);
